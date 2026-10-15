@@ -717,6 +717,7 @@ def play_track(
     if item.state != QueueItemState.PLAYING:
         item.state = QueueItemState.PLAYING
         item.started_at = datetime.now(timezone.utc)
+        item.completed_at = None
         db.add(PlaybackHistory(queue_item_id=item.id, played_by_user_id=user.id, queue_version=item.version, started_at=item.started_at))
         room.queue_version += 1
     db.commit()
