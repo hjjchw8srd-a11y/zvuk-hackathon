@@ -707,18 +707,19 @@ def play_track(
     room = db.scalar(select(Room).where(Room.id == room_id).with_for_update())
     playlist_round = _active_round(db, room_id)
     item = _queue_item(db, playlist_round, track_id)
-    if item is None or item.state not in (QueueItemState.QUEUED, QueueItemState.PLAYING):
-        raise HTTPException(status_code=409, detail="Трек недоступен в текущей очереди")
+    if item is None or item.state == QueueItemState.REMOVED:
+        raise HTTPException(status_code=404, detail="Трек не найден в очереди")
     current = db.scalar(select(QueueItem).where(QueueItem.round_id == playlist_round.id, QueueItem.state == QueueItemState.PLAYING).with_for_update())
     if current is not None and current.id != item.id:
         current.state = QueueItemState.PLAYED
         current.completed_at = datetime.now(timezone.utc)
-    if item.state == QueueItemState.QUEUED:
+        db.flush()
+    if item.state != QueueItemState.PLAYING:
         item.state = QueueItemState.PLAYING
         item.started_at = datetime.now(timezone.utc)
         db.add(PlaybackHistory(queue_item_id=item.id, played_by_user_id=user.id, queue_version=item.version, started_at=item.started_at))
         room.queue_version += 1
-        db.commit()
+    db.commit()
     return {"ok": True, "queue_version": item.version}
 
 
