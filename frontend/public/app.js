@@ -17,9 +17,28 @@ const nav = [
   ['settings','Настройки','<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.05.05-1.9 1.9-.05-.05A1.7 1.7 0 0 0 16 18.45a1.7 1.7 0 0 0-1 .89V21h-3v-1.66a1.7 1.7 0 0 0-1-.89 1.7 1.7 0 0 0-1.88.34l-.05.05-1.9-1.9.05-.05A1.7 1.7 0 0 0 7.55 15a1.7 1.7 0 0 0-.89-1H5v-3h1.66a1.7 1.7 0 0 0 .89-1 1.7 1.7 0 0 0-.34-1.88l-.05-.05 1.9-1.9.05.05A1.7 1.7 0 0 0 11 6.55a1.7 1.7 0 0 0 1-.89V4h3v1.66a1.7 1.7 0 0 0 1 .89 1.7 1.7 0 0 0 1.88-.34l.05-.05 1.9 1.9-.05.05A1.7 1.7 0 0 0 19.45 10a1.7 1.7 0 0 0 .89 1H22v3h-1.66a1.7 1.7 0 0 0-.94 1Z"/>']
 ];
 const icon = p => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
-function toast(message,bad=false){const e=document.createElement('div');e.className='toast'+(bad?' error':'');e.textContent=message;$('#toast-root').append(e);setTimeout(()=>e.remove(),4000)}
+function toast(message,bad=false){const root=$('#toast-root');[...root.children].filter(x=>x.textContent===message).forEach(x=>x.remove());const e=document.createElement('div');e.className='toast'+(bad?' error':'');e.textContent=message;root.append(e);setTimeout(()=>e.remove(),5000)}
 const request=(path,options)=>VolnaAPI.request(path,options);
 const post=(path,data)=>VolnaAPI.post(path,data);
+async function validateAudioFile(file){
+  if(!(file instanceof File)||!file.size)throw new Error('Выберите аудиофайл');
+  if(file.size>15*1024*1024)throw new Error('Файл больше 15 МБ');
+  const probe=new Uint8Array(await file.slice(0,512*1024).arrayBuffer());
+  const text=new TextDecoder('utf-8',{fatal:false}).decode(probe);
+  if(text.includes('#EXTM3U')||text.includes('#EXT-X-'))throw new Error('Это потоковый плейлист, а не MP3. Экспортируйте трек как настоящий аудиофайл');
+  const url=URL.createObjectURL(file);
+  try{
+    await new Promise((resolve,reject)=>{
+      const audio=document.createElement('audio');let settled=false;
+      const finish=error=>{if(settled)return;settled=true;clearTimeout(timer);audio.removeAttribute('src');audio.load();error?reject(error):resolve()};
+      const timer=setTimeout(()=>finish(new Error('Не удалось прочитать аудиофайл')),8000);
+      audio.preload='metadata';
+      audio.addEventListener('loadedmetadata',()=>Number.isFinite(audio.duration)&&audio.duration>0?finish():finish(new Error('В файле не найдена звуковая дорожка')),{once:true});
+      audio.addEventListener('error',()=>finish(new Error('Браузер не поддерживает содержимое этого файла')),{once:true});
+      audio.src=url;
+    });
+  }finally{URL.revokeObjectURL(url)}
+}
 function approved(){return (S.data?.tracks||[]).filter(t=>t.status==='approved'&&(!t.queue_state||t.queue_state==='queued'))}
 function allPlayable(){return (S.data?.tracks||[]).filter(t=>t.status==='approved'&&t.queue_state!=='removed')}
 function selectedCommunity(){return S.communities.find(c=>c.id===S.communityId)}
@@ -218,13 +237,13 @@ document.addEventListener('click',async event=>{
 });
 document.addEventListener('submit',async event=>{
   if(event.target.id==='modal-form'){
-    event.preventDefault();const form=event.target,type=form.dataset.type,button=form.querySelector('[type=submit]');button.disabled=true;
+    event.preventDefault();const form=event.target,type=form.dataset.type,button=form.querySelector('[type=submit]'),buttonText=button.textContent;button.disabled=true;
     try{let result;
       if(type==='create')result=await post('/api/communities',Object.fromEntries(new FormData(form)));
       else if(type==='join')result=await post('/api/join',Object.fromEntries(new FormData(form)));
-      else{result=await request(communityPath('tracks/upload'),{method:'POST',body:new FormData(form)});await refresh();toast(result.status==='pending'?'Файл загружен и ждёт модерации':'Файл добавлен в плейлист')}
+      else{const body=new FormData(form);button.textContent='Проверяем файл…';await validateAudioFile(body.get('file'));button.textContent='Загружаем…';result=await request(communityPath('tracks/upload'),{method:'POST',body});await refresh();toast(result.status==='pending'?'Файл загружен и ждёт модерации':`Файл добавлен в плейлист · ${result.format.toUpperCase()}`)}
       closeModal();if(type!=='upload'){S.view='overview';await boot(result.id);toast(type==='create'?'Сообщество создано':'Добро пожаловать в сообщество')}
-    }catch(e){toast(e.message,true)}finally{button.disabled=false}
+    }catch(e){toast(e.message,true)}finally{button.disabled=false;button.textContent=buttonText}
   }
   if(event.target.id==='profile-form'){
     event.preventDefault();const form=event.target;try{const data=await request('/api/profile',{method:'PATCH',headers:{'content-type':'application/json'},body:JSON.stringify(Object.fromEntries(new FormData(form)))});S.user.display_name=data.display_name;await refresh();toast('Имя сохранено')}catch(e){toast(e.message,true)}

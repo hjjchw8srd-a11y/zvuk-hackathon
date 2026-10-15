@@ -62,6 +62,17 @@ class CommunityApiTests(unittest.TestCase):
             audio.writeframes(b"\x00\x00" * 800)
         return output.getvalue()
 
+    @staticmethod
+    def _mp3_bytes_with_large_id3_tag() -> bytes:
+        tag = b"\x00" * 5000
+        size = len(tag)
+        synchsafe_size = bytes(
+            ((size >> 21) & 0x7F, (size >> 14) & 0x7F, (size >> 7) & 0x7F, size & 0x7F)
+        )
+        id3 = b"ID3\x04\x00\x00" + synchsafe_size + tag
+        mp3_frame = b"\xFF\xFB\x90\x64" + b"\x00" * 413
+        return id3 + mp3_frame
+
     def _create_room(self) -> str:
         created = self.client.post(
             "/api/communities",
@@ -105,8 +116,47 @@ class CommunityApiTests(unittest.TestCase):
             files={"file": ("not-music.mp3", b"this is not audio" * 20, "audio/mpeg")},
         )
         self.assertEqual(uploaded.status_code, 400, uploaded.text)
-        self.assertIn("повреждён", uploaded.json()["detail"])
+        self.assertIn("не сможет воспроизвести", uploaded.json()["detail"])
         self.assertEqual(list(settings.uploads_dir.iterdir()), [])
+
+    def test_upload_rejects_hls_playlist_disguised_as_mp3(self) -> None:
+        room_id = self._create_room()
+        playlist = b"ID3\x03\x00\x00\x00\x00\x00\x00#EXTM3U\n#EXT-X-VERSION:7\n" + b"x" * 200
+        uploaded = self.client.post(
+            f"/api/communities/{room_id}/tracks/upload",
+            files={"file": ("stream.mp3", playlist, "audio/mpeg")},
+        )
+        self.assertEqual(uploaded.status_code, 400, uploaded.text)
+        self.assertIn("HLS-плейлист", uploaded.json()["detail"])
+        self.assertEqual(list(settings.uploads_dir.iterdir()), [])
+
+    def test_upload_detects_format_from_content_not_extension(self) -> None:
+        room_id = self._create_room()
+        content = self._wav_bytes()
+        uploaded = self.client.post(
+            f"/api/communities/{room_id}/tracks/upload",
+            files={"file": ("mistaken.mp3", content, "audio/mpeg")},
+        )
+        self.assertEqual(uploaded.status_code, 201, uploaded.text)
+        self.assertEqual(uploaded.json()["format"], "wav")
+        stored = list(settings.uploads_dir.iterdir())
+        self.assertEqual(len(stored), 1)
+        self.assertEqual(stored[0].suffix, ".wav")
+
+    def test_upload_accepts_mp3_after_large_id3_metadata(self) -> None:
+        room_id = self._create_room()
+        uploaded = self.client.post(
+            f"/api/communities/{room_id}/tracks/upload",
+            files={
+                "file": (
+                    "tagged.mp3",
+                    self._mp3_bytes_with_large_id3_tag(),
+                    "audio/mpeg",
+                )
+            },
+        )
+        self.assertEqual(uploaded.status_code, 201, uploaded.text)
+        self.assertEqual(uploaded.json()["format"], "mp3")
 
     def test_frontend_happy_path(self) -> None:
         bootstrap = self.client.get("/api/bootstrap")

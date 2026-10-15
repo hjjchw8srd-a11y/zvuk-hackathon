@@ -50,6 +50,15 @@ from app.services import (
 router = APIRouter(prefix="/api", tags=["communities"])
 MAX_AUDIO_SIZE = 15 * 1024 * 1024
 INVITE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+AUDIO_MIME_TYPES = {
+    "mp3": "audio/mpeg",
+    "wav": "audio/wav",
+    "ogg": "audio/ogg",
+    "m4a": "audio/mp4",
+    "aac": "audio/aac",
+    "webm": "audio/webm",
+    "flac": "audio/flac",
+}
 
 LIBRARY = [
     {"key": "dawn", "title": "Первые лучи", "artist": "Volna Studio", "genre": "Эмбиент", "duration_seconds": 48, "color": "#f4b782"},
@@ -530,24 +539,53 @@ def add_library_track(
     return {"id": track.id, "status": status.value}
 
 
-def _audio_signature(content: bytes, extension: str) -> bool:
-    if b"#EXTM3U" in content or b"#EXT-X-" in content:
-        return False
-    if extension == "wav":
-        return content[:4] == b"RIFF" and content[8:12] == b"WAVE"
-    if extension == "ogg":
-        return content[:4] == b"OggS"
-    if extension == "flac":
-        return content[:4] == b"fLaC"
-    if extension in ("m4a", "mp4"):
-        return content[4:8] == b"ftyp"
-    if extension == "webm":
-        return content[:4] == b"\x1aE\xdf\xa3"
-    if extension == "aac":
-        return len(content) > 2 and content[0] == 0xFF and content[1] & 0xF6 == 0xF0
-    if extension == "mp3":
-        return content[:3] == b"ID3" or any(content[index] == 0xFF and content[index + 1] & 0xE0 == 0xE0 for index in range(min(len(content) - 1, 4096)))
+def _contains_hls_manifest(content: bytes) -> bool:
+    return b"#EXTM3U" in content or b"#EXT-X-" in content
+
+
+def _has_mp3_frame(content: bytes) -> bool:
+    """Find a real MPEG audio frame, skipping an optional ID3v2 metadata tag."""
+
+    start = 0
+    if content[:3] == b"ID3":
+        if len(content) < 10 or any(byte & 0x80 for byte in content[6:10]):
+            return False
+        tag_size = sum(byte << shift for byte, shift in zip(content[6:10], (21, 14, 7, 0)))
+        start = 10 + tag_size + (10 if content[5] & 0x10 else 0)
+        if start >= len(content):
+            return False
+
+    for index in range(start, len(content) - 3):
+        first, second, third = content[index : index + 3]
+        if first != 0xFF or second & 0xE0 != 0xE0:
+            continue
+        version = (second >> 3) & 0x03
+        layer = (second >> 1) & 0x03
+        bitrate = (third >> 4) & 0x0F
+        sample_rate = (third >> 2) & 0x03
+        if version != 0x01 and layer != 0 and bitrate not in (0, 0x0F) and sample_rate != 0x03:
+            return True
     return False
+
+
+def _detect_audio_format(content: bytes) -> str | None:
+    if _contains_hls_manifest(content):
+        return None
+    if content[:4] == b"RIFF" and content[8:12] == b"WAVE":
+        return "wav"
+    if content[:4] == b"OggS":
+        return "ogg"
+    if content[:4] == b"fLaC":
+        return "flac"
+    if content[4:8] == b"ftyp":
+        return "m4a"
+    if content[:4] == b"\x1aE\xdf\xa3":
+        return "webm"
+    if len(content) > 2 and content[0] == 0xFF and content[1] & 0xF6 == 0xF0:
+        return "aac"
+    if _has_mp3_frame(content):
+        return "mp3"
+    return None
 
 
 @router.post("/communities/{room_id}/tracks/upload", status_code=201)
@@ -565,25 +603,30 @@ async def upload_track(
     content = await file.read(MAX_AUDIO_SIZE + 1)
     if len(content) < 100 or len(content) > MAX_AUDIO_SIZE:
         raise HTTPException(status_code=413, detail="Размер файла должен быть от 100 байт до 15 МБ")
-    extension = Path(file.filename or "").suffix.lower().lstrip(".")
-    allowed = {"mp3": "audio/mpeg", "wav": "audio/wav", "ogg": "audio/ogg", "m4a": "audio/mp4", "aac": "audio/aac", "webm": "audio/webm", "flac": "audio/flac"}
-    if extension not in allowed:
-        raise HTTPException(status_code=400, detail="Поддерживаются аудиоформаты: MP3, WAV, OGG, M4A, AAC, WebM, FLAC")
-    if not _audio_signature(content, extension):
+    if _contains_hls_manifest(content):
         raise HTTPException(
             status_code=400,
-            detail="Файл повреждён или его содержимое не соответствует выбранному аудиоформату",
+            detail=(
+                "Это потоковый HLS-плейлист, а не аудиофайл. "
+                "Сохраните или экспортируйте трек как настоящий MP3, M4A, WAV или другой аудиофайл"
+            ),
+        )
+    detected_format = _detect_audio_format(content)
+    if detected_format is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Браузер не сможет воспроизвести этот файл: поддерживаются MP3, WAV, OGG, M4A, AAC, WebM и FLAC",
         )
     stem = re.sub(r"[_]+", " ", Path(file.filename or "track").stem)
     parts = re.split(r"\s+[-–—]\s+", stem, maxsplit=1)
     parsed_artist, parsed_title = (parts[0], parts[1]) if len(parts) == 2 else ("Неизвестный артист", stem)
     status = ModerationStatus.APPROVED if _moderator(membership) else ModerationStatus.PENDING
-    stored_name = f"{uuid.uuid4().hex}.{extension}"
+    stored_name = f"{uuid.uuid4().hex}.{detected_format}"
     uploads = _uploads_dir()
     uploads.mkdir(parents=True, exist_ok=True)
     destination = uploads / stored_name
     destination.write_bytes(content)
-    track = Track(room_id=room_id, title=_clean(title or parsed_title, 255), artist=_clean(artist or parsed_artist, 255), genre=_clean(genre, 100), source_type=TrackSource.UPLOAD, storage_key=stored_name, original_filename=file.filename, mime_type=allowed[extension], size_bytes=len(content), moderation_status=status, created_by_user_id=user.id)
+    track = Track(room_id=room_id, title=_clean(title or parsed_title, 255), artist=_clean(artist or parsed_artist, 255), genre=_clean(genre, 100), source_type=TrackSource.UPLOAD, storage_key=stored_name, original_filename=file.filename, mime_type=AUDIO_MIME_TYPES[detected_format], size_bytes=len(content), moderation_status=status, created_by_user_id=user.id)
     try:
         db.add(track)
         db.flush()
@@ -594,7 +637,7 @@ async def upload_track(
         db.rollback()
         destination.unlink(missing_ok=True)
         raise
-    return {"id": track.id, "status": status.value, "metadata": {"title": track.title, "artist": track.artist}}
+    return {"id": track.id, "status": status.value, "format": detected_format, "metadata": {"title": track.title, "artist": track.artist}}
 
 
 @router.get("/communities/{room_id}/tracks/{track_id}/audio")
