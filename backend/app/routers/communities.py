@@ -567,8 +567,8 @@ async def upload_track(
         raise HTTPException(status_code=413, detail="Размер файла должен быть от 100 байт до 15 МБ")
     extension = Path(file.filename or "").suffix.lower().lstrip(".")
     allowed = {"mp3": "audio/mpeg", "wav": "audio/wav", "ogg": "audio/ogg", "m4a": "audio/mp4", "aac": "audio/aac", "webm": "audio/webm", "flac": "audio/flac"}
-    if extension not in allowed or not _audio_signature(content, extension):
-        raise HTTPException(status_code=400, detail="Содержимое не соответствует поддерживаемому аудиоформату")
+    if extension not in allowed:
+        raise HTTPException(status_code=400, detail="Поддерживаются аудиоформаты: MP3, WAV, OGG, M4A, AAC, FLAC")
     stem = re.sub(r"[_]+", " ", Path(file.filename or "track").stem)
     parts = re.split(r"\s+[-–—]\s+", stem, maxsplit=1)
     parsed_artist, parsed_title = (parts[0], parts[1]) if len(parts) == 2 else ("Неизвестный артист", stem)
@@ -711,7 +711,8 @@ def play_track(
         raise HTTPException(status_code=409, detail="Трек недоступен в текущей очереди")
     current = db.scalar(select(QueueItem).where(QueueItem.round_id == playlist_round.id, QueueItem.state == QueueItemState.PLAYING).with_for_update())
     if current is not None and current.id != item.id:
-        raise HTTPException(status_code=409, detail="Сначала завершите текущий трек")
+        current.state = QueueItemState.PLAYED
+        current.completed_at = datetime.now(timezone.utc)
     if item.state == QueueItemState.QUEUED:
         item.state = QueueItemState.PLAYING
         item.started_at = datetime.now(timezone.utc)

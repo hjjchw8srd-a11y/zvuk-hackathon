@@ -13,10 +13,18 @@ class AudioController {
     this.stop();
     this.track = track;
     if (track.source_type === 'upload') {
-      this.audio = new Audio(url);
-      this.audio.volume = this.volume;
-      this.audio.addEventListener('ended', () => this.finish());
-      this.audio.addEventListener('error', () => { this.pause(); this.onError?.('Не удалось воспроизвести файл'); });
+      const audio = new Audio();
+      audio.preload = 'auto';
+      audio.src = url;
+      audio.volume = this.volume;
+      audio.addEventListener('ended', () => this.finish());
+      audio.addEventListener('error', () => {
+        if (this.playing && !this.synthTimer) {
+          this.audio = null;
+          this.startSynth();
+        }
+      });
+      this.audio = audio;
     }
     await this.play();
   }
@@ -27,7 +35,10 @@ class AudioController {
     try {
       if (this.audio) await this.audio.play();
       else this.startSynth();
-    } catch (error) { this.playing = false; throw error; }
+    } catch (error) {
+      this.audio = null;
+      this.startSynth();
+    }
   }
   pause() {
     if (!this.playing) return;
