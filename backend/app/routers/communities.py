@@ -531,6 +531,8 @@ def add_library_track(
 
 
 def _audio_signature(content: bytes, extension: str) -> bool:
+    if b"#EXTM3U" in content or b"#EXT-X-" in content:
+        return False
     if extension == "wav":
         return content[:4] == b"RIFF" and content[8:12] == b"WAVE"
     if extension == "ogg":
