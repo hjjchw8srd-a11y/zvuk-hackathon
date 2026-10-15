@@ -1,7 +1,7 @@
-/* Same-origin API client; identity stays in the server session. */
+/* Same-origin & cross-origin API client; identity stays in the server session. */
 window.VolnaAPI = {
   async request(path, options = {}) {
-    const response = await fetch(path, { credentials: 'same-origin', ...options });
+    const response = await fetch(path, { credentials: 'include', ...options });
     let data;
     try { data = await response.json(); }
     catch { data = { error: 'Сервер вернул неожиданный ответ' }; }
