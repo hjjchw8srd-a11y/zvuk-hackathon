@@ -568,7 +568,12 @@ async def upload_track(
     extension = Path(file.filename or "").suffix.lower().lstrip(".")
     allowed = {"mp3": "audio/mpeg", "wav": "audio/wav", "ogg": "audio/ogg", "m4a": "audio/mp4", "aac": "audio/aac", "webm": "audio/webm", "flac": "audio/flac"}
     if extension not in allowed:
-        raise HTTPException(status_code=400, detail="Поддерживаются аудиоформаты: MP3, WAV, OGG, M4A, AAC, FLAC")
+        raise HTTPException(status_code=400, detail="Поддерживаются аудиоформаты: MP3, WAV, OGG, M4A, AAC, WebM, FLAC")
+    if not _audio_signature(content, extension):
+        raise HTTPException(
+            status_code=400,
+            detail="Файл повреждён или его содержимое не соответствует выбранному аудиоформату",
+        )
     stem = re.sub(r"[_]+", " ", Path(file.filename or "track").stem)
     parts = re.split(r"\s+[-–—]\s+", stem, maxsplit=1)
     parsed_artist, parsed_title = (parts[0], parts[1]) if len(parts) == 2 else ("Неизвестный артист", stem)
@@ -607,6 +612,7 @@ def track_audio(
     return FileResponse(
         path,
         media_type=track.mime_type or "audio/mpeg",
+        filename=track.original_filename or path.name,
         content_disposition_type="inline",
     )
 

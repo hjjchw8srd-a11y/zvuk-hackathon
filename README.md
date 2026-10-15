@@ -10,7 +10,7 @@ Backend-основа для общего плейлиста студенческ
 - PostgreSQL 16
 - SQLAlchemy 2.0
 - Alembic
-- React + Vite
+- интерфейс Volna на HTML/CSS/JavaScript + Vite
 - Docker Compose
 
 ## Быстрый запуск через Docker
@@ -25,6 +25,17 @@ docker compose up --build
 - Swagger: `http://localhost:8000/docs`
 - состояние API и БД: `http://localhost:8000/api/health`
 - PostgreSQL: `localhost:5432`
+
+В отдельном терминале запустите интерфейс:
+
+```powershell
+npm install --prefix frontend
+npm run dev
+```
+
+Откройте `http://localhost:5173`. Vite проксирует запросы `/api` в backend на
+порту `8000`, поэтому гостевая сессия и воспроизведение загруженных файлов
+работают в одном origin.
 
 При первом запуске backend дождётся готовности PostgreSQL и применит миграции
 Alembic. Данные PostgreSQL сохраняются в volume `postgres_data`.
@@ -53,6 +64,10 @@ uvicorn app.main:app --reload --port 8000
 ```
 
 При другой конфигурации PostgreSQL измените `DATABASE_URL` в `backend/.env`.
+
+Загружаемые MP3, WAV, OGG, M4A, AAC, WebM и FLAC ограничены размером 15 МБ.
+Backend проверяет сигнатуру содержимого, а аудио выдаётся с поддержкой Range-
+запросов, необходимых браузерному плееру.
 
 ## Схема данных
 

@@ -19,10 +19,9 @@ class AudioController {
       audio.volume = this.volume;
       audio.addEventListener('ended', () => this.finish());
       audio.addEventListener('error', () => {
-        if (this.playing && !this.synthTimer) {
-          this.audio = null;
-          this.startSynth();
-        }
+        if (!this.playing) return;
+        this.playing = false;
+        this.onError?.('Браузер не смог воспроизвести этот аудиофайл');
       });
       this.audio = audio;
     }
@@ -36,8 +35,9 @@ class AudioController {
       if (this.audio) await this.audio.play();
       else this.startSynth();
     } catch (error) {
-      this.audio = null;
-      this.startSynth();
+      this.playing = false;
+      if (this.audio) throw new Error('Браузер не смог воспроизвести этот аудиофайл', { cause: error });
+      throw error;
     }
   }
   pause() {
