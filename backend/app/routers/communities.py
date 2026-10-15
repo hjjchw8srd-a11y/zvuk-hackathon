@@ -594,17 +594,19 @@ async def upload_track(
 def track_audio(
     room_id: uuid.UUID,
     track_id: uuid.UUID,
-    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _member(db, room_id, user.id)
     track = db.get(Track, track_id)
     if track is None or track.room_id != room_id or track.source_type != TrackSource.UPLOAD or not track.storage_key:
         raise HTTPException(status_code=404, detail="Аудиофайл не найден")
     path = (_uploads_dir() / track.storage_key).resolve()
     if path.parent != _uploads_dir().resolve() or not path.is_file():
         raise HTTPException(status_code=404, detail="Аудиофайл не найден")
-    return FileResponse(path, media_type=track.mime_type or "audio/mpeg", filename=track.original_filename)
+    return FileResponse(
+        path,
+        media_type=track.mime_type or "audio/mpeg",
+        content_disposition_type="inline",
+    )
 
 
 @router.post("/communities/{room_id}/tracks/{track_id}/vote")
