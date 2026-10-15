@@ -1,4 +1,5 @@
 node_modules/
+backend/node_modules/
 dist/
 *.log
 *.tmp
@@ -7,3 +8,7 @@ dist/
 .idea/
 .env
 .env.local
+.venv/
+venv/
+__pycache__/
+*.pyc
