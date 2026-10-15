@@ -1,12 +1,39 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Track</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b100c">
+  <meta name="description" content="Волна — совместный плейлист для группы или факультета. Предлагайте музыку, голосуйте и слушайте вместе.">
+  <title>Волна — плейлист сообщества</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css?v=3">
+  <script defer src="/api.js?v=3"></script>
+  <script defer src="/vendor/qrcode.js?v=3"></script>
+  <script defer src="/AudioController.js?v=3"></script>
+  <script defer src="/app.js?v=3"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="/" aria-label="Волна — главная"><span class="brand-mark"><svg viewBox="0 0 48 48" fill="none" aria-hidden="true"><path d="M6 28C11 14 17 14 23 28C29 42 35 42 42 20" stroke="currentColor" stroke-width="5" stroke-linecap="round"/></svg></span><span>волна<span class="brand-dot">.</span></span></a>
+      <div class="sidebar-scroll">
+        <div class="nav-label nav-main-label">МУЗЫКА</div>
+        <nav id="main-nav" class="main-nav" aria-label="Основная навигация"></nav>
+        <div class="nav-label">ТВОИ СООБЩЕСТВА</div>
+        <div id="community-switcher" class="community-switcher"></div>
+        <button class="join-sidebar" data-action="join">＋ Вступить по коду</button>
+      </div>
+      <div class="sidebar-bottom"><div class="sidebar-note"><span class="sidebar-note-icon">♫</span><span>Музыка лучше,<br>когда мы вместе.</span></div><button id="profile-button" class="profile-button" type="button"></button></div>
+    </aside>
+    <main class="main-area">
+      <header class="topbar"><button class="mobile-menu icon-button" id="mobile-menu" type="button" aria-label="Открыть меню">☰</button><div class="breadcrumb" id="breadcrumb">Плейлист сообщества</div><div class="top-actions"><span class="live-badge" id="connection-state">LIVE</span><span class="top-date" id="top-date"></span><button class="top-avatar" id="top-avatar" type="button" title="Профиль"></button></div></header>
+      <div id="music-island" class="island-container"></div>
+      <div id="page" class="page"><div class="loading"><div class="loading-wave">〰</div><p>Настраиваем вашу волну…</p></div></div>
+    </main>
+    <div id="player" class="player hidden"></div>
+  </div>
+  <div id="modal-root"></div>
+  <div id="toast-root" role="status" aria-live="polite"></div>
+</body>
 </html>

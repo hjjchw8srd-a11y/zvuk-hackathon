@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
@@ -25,7 +27,7 @@ def create_user(db: Session = Depends(get_db)):
 
 
 @router.get("/{user_id}", response_model=UserOut)
-def get_user(user_id: int, db: Session = Depends(get_db)):
+def get_user(user_id: uuid.UUID, db: Session = Depends(get_db)):
     """Получить пользователя по ID."""
     user = db.get(User, user_id)
     if user is None:
@@ -34,7 +36,7 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.delete("/{user_id}", status_code=204)
-def delete_user(user_id: int, db: Session = Depends(get_db)):
+def delete_user(user_id: uuid.UUID, db: Session = Depends(get_db)):
     """Удалить пользователя по ID."""
     user = db.get(User, user_id)
     if user is None:

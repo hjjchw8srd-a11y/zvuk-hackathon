@@ -10,5 +10,7 @@ dist/
 .env.local
 .venv/
 venv/
+.test-deps/
 __pycache__/
 *.pyc
+backend/uploads/

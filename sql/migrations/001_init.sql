@@ -1,4 +1,3 @@
-CREATE TABLE IF NOT EXISTS users (
-  id SERIAL PRIMARY KEY,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+-- Legacy placeholder.
+-- The initial migration now lives at:
+--   backend/alembic/versions/001_initial_schema.py

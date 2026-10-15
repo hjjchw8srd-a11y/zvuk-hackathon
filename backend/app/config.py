@@ -13,7 +13,9 @@ class Settings(BaseSettings):
     )
 
     port: int = 8000
-    database_url: str = "postgresql+psycopg2://postgres:postgres@localhost:5432/track"
+    database_url: str = "postgresql+psycopg2://track:track@localhost:5432/track"
+    session_secret: str = "local-development-secret-change-me"
+    uploads_dir: Path = BACKEND_DIR / "uploads"
 
 
 settings = Settings()

@@ -1,4 +1,11 @@
-CREATE TABLE IF NOT EXISTS users (
-  id SERIAL PRIMARY KEY,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
+-- The canonical PostgreSQL schema is managed by Alembic.
+--
+-- Apply it with:
+--   cd backend
+--   alembic upgrade head
+--
+-- Generate a reviewable SQL script without changing a database with:
+--   alembic upgrade head --sql
+--
+-- Do not maintain a second hand-written schema here: it will drift from the
+-- SQLAlchemy models and Alembic revisions.
