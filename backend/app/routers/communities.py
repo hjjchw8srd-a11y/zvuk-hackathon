@@ -35,6 +35,7 @@ from app.models import (
     Room,
     RoomMember,
     RoundStatus,
+    RoundTopSnapshot,
     Track,
     TrackSource,
     User,
@@ -74,13 +75,24 @@ LIBRARY = [
 
 
 class ProfileUpdate(BaseModel):
-    display_name: str = Field(min_length=2, max_length=60)
+    display_name: str | None = Field(default=None, min_length=2, max_length=60)
+    avatar_url: str | None = Field(default=None, max_length=500)
 
 
 class CommunityCreate(BaseModel):
     name: str = Field(min_length=3, max_length=70)
     faculty: str = Field(default="", max_length=90)
     description: str = Field(default="", max_length=260)
+    avatar_url: str | None = Field(default=None, max_length=500)
+    external_link: str | None = Field(default=None, max_length=500)
+
+
+class CommunityUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=3, max_length=70)
+    faculty: str | None = Field(default=None, max_length=90)
+    description: str | None = Field(default=None, max_length=260)
+    avatar_url: str | None = Field(default=None, max_length=500)
+    external_link: str | None = Field(default=None, max_length=500)
 
 
 class JoinRequest(BaseModel):
@@ -212,6 +224,8 @@ def bootstrap(
                 "name": room.name,
                 "faculty": room.faculty,
                 "description": room.description,
+                "avatar_url": room.avatar_url,
+                "external_link": room.external_link,
                 "created_at": room.created_at,
                 "role": role.value,
                 "member_count": db.scalar(
@@ -235,9 +249,12 @@ def update_profile(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    user.display_name = _clean(payload.display_name, 60)
+    if payload.display_name is not None:
+        user.display_name = _clean(payload.display_name, 60)
+    if payload.avatar_url is not None:
+        user.avatar_url = payload.avatar_url.strip() or None
     db.commit()
-    return {"display_name": user.display_name}
+    return {"display_name": user.display_name, "avatar_url": user.avatar_url}
 
 
 @router.post("/communities", status_code=201)
@@ -250,6 +267,8 @@ def create_community(
         name=_clean(payload.name, 70),
         faculty=_clean(payload.faculty, 90),
         description=_clean(payload.description, 260),
+        avatar_url=payload.avatar_url.strip() if payload.avatar_url else None,
+        external_link=payload.external_link.strip() if payload.external_link else None,
         invite_code=_invite_code(db),
         owner_id=user.id,
     )
@@ -259,7 +278,47 @@ def create_community(
     db.flush()
     create_playlist_round(db, room.id, user.id)
     db.commit()
-    return {"id": room.id}
+    return {
+        "id": room.id,
+        "name": room.name,
+        "avatar_url": room.avatar_url,
+        "external_link": room.external_link,
+    }
+
+
+@router.patch("/communities/{room_id}")
+def update_community(
+    room_id: uuid.UUID,
+    payload: CommunityUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    room = _room(db, room_id)
+    membership = _member(db, room_id, user.id)
+    if not _moderator(membership):
+        raise HTTPException(status_code=403, detail="Недостаточно прав для редактирования комнаты")
+
+    if payload.name is not None:
+        room.name = _clean(payload.name, 70)
+    if payload.faculty is not None:
+        room.faculty = _clean(payload.faculty, 90)
+    if payload.description is not None:
+        room.description = _clean(payload.description, 260)
+    if payload.avatar_url is not None:
+        room.avatar_url = payload.avatar_url.strip() or None
+    if payload.external_link is not None:
+        room.external_link = payload.external_link.strip() or None
+
+    db.commit()
+    db.refresh(room)
+    return {
+        "id": room.id,
+        "name": room.name,
+        "faculty": room.faculty,
+        "description": room.description,
+        "avatar_url": room.avatar_url,
+        "external_link": room.external_link,
+    }
 
 
 @router.post("/join")
@@ -407,6 +466,8 @@ def _community_state(db: Session, room: Room, membership: RoomMember, user: User
             "name": room.name,
             "faculty": room.faculty,
             "description": room.description,
+            "avatar_url": room.avatar_url,
+            "external_link": room.external_link,
             "invite_code": room.invite_code,
             "owner_id": room.owner_id,
             "created_at": room.created_at,
@@ -501,6 +562,47 @@ def history(
             for play, track, play_user in plays
         ],
     }
+
+
+@router.get("/communities/{room_id}/top-history")
+def top_history(
+    room_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """История топов треков по итогам прошедших раундов голосования."""
+    _member(db, room_id, user.id)
+    snapshots = db.scalars(
+        select(RoundTopSnapshot)
+        .where(RoundTopSnapshot.room_id == room_id)
+        .order_by(RoundTopSnapshot.created_at.desc(), RoundTopSnapshot.rank.asc())
+    ).all()
+
+    rounds_map: dict[uuid.UUID, list] = {}
+    for s in snapshots:
+        rounds_map.setdefault(s.round_id, []).append(s)
+
+    result = []
+    for round_id_val, entries in rounds_map.items():
+        round_obj = db.get(PlaylistRound, round_id_val)
+        result.append({
+            "round_id": round_id_val,
+            "round_key": round_obj.key if round_obj else "",
+            "starts_at": round_obj.starts_at if round_obj else None,
+            "ends_at": round_obj.ends_at if round_obj else None,
+            "top": [
+                {
+                    "rank": e.rank,
+                    "track_id": e.track_id,
+                    "track_title": e.track_title,
+                    "track_artist": e.track_artist,
+                    "score": e.score,
+                    "fair_score": e.fair_score,
+                }
+                for e in entries
+            ],
+        })
+    return {"history": result}
 
 
 @router.get("/communities/{room_id}/moderation")

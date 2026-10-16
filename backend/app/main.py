@@ -18,7 +18,7 @@ from sqlalchemy import text
 from app.config import BACKEND_DIR, settings
 from app.database import engine
 from app import models as _models  # noqa: F401 — регистрирует модели в metadata
-from app.routers import communities, users
+from app.routers import auth, communities, users
 
 _ = _models
 
@@ -42,6 +42,7 @@ app.add_middleware(
 )
 
 # ── Роутеры ─────────────────────────────────────────────────────────────────
+app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(communities.router)
 

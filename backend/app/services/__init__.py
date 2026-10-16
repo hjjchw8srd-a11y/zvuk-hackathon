@@ -11,6 +11,7 @@ from app.services.playlist import (
     create_playlist_round,
     fairness_penalty,
     get_ranked_queue,
+    snapshot_round_top,
     weekly_round_key,
 )
 
@@ -25,5 +26,6 @@ __all__ = [
     "create_playlist_round",
     "fairness_penalty",
     "get_ranked_queue",
+    "snapshot_round_top",
     "weekly_round_key",
 ]

@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     port: int = 8000
     database_url: str = "postgresql+psycopg2://track:track@localhost:5432/track"
     session_secret: str = "local-development-secret-change-me"
+    jwt_secret: str = "jwt-dev-secret-change-me-in-production"
+    jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
     uploads_dir: Path = BACKEND_DIR / "uploads"
     app_base_url: str = ""
     frontend_port: int = 5173

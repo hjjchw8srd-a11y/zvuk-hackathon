@@ -25,6 +25,7 @@ from app.models import (
     Room,
     RoomMember,
     RoundStatus,
+    RoundTopSnapshot,
     Track,
     User,
     Vote,
@@ -137,6 +138,7 @@ def create_playlist_round(
         return active_round
 
     if active_round is not None:
+        snapshot_round_top(session, room_id, active_round.id, now=current_time)
         active_round.status = RoundStatus.CLOSED
         active_round.ends_at = current_time
 
@@ -245,22 +247,56 @@ def cast_vote(
     return new_value
 
 
+def snapshot_round_top(
+    session: Session,
+    room_id: uuid.UUID,
+    round_id: uuid.UUID,
+    *,
+    limit: int = 20,
+    now: datetime | None = None,
+) -> list[RoundTopSnapshot]:
+    """Capture final standings of a round into immutable snapshots."""
+    current_time = now or utc_now()
+    ranked = get_ranked_queue(session, room_id, round_id=round_id, now=current_time)
+    snapshots: list[RoundTopSnapshot] = []
+    for rank, item in enumerate(ranked[:limit], start=1):
+        snapshot = RoundTopSnapshot(
+            round_id=round_id,
+            room_id=room_id,
+            rank=rank,
+            track_id=item.track.id,
+            track_title=item.track.title,
+            track_artist=item.track.artist,
+            score=item.score,
+            fair_score=item.fair_score,
+            created_at=current_time,
+        )
+        session.add(snapshot)
+        snapshots.append(snapshot)
+    session.flush()
+    return snapshots
+
+
 def get_ranked_queue(
     session: Session,
     room_id: uuid.UUID,
     *,
+    round_id: uuid.UUID | None = None,
     current_user_id: uuid.UUID | None = None,
     now: datetime | None = None,
 ) -> list[RankedQueueItem]:
-    """Return the active queue sorted by fair score and insertion time."""
+    """Return the active or specified round queue sorted by fair score and insertion time."""
 
-    active_round_id = session.scalar(
-        select(PlaylistRound.id).where(
-            PlaylistRound.room_id == room_id,
-            PlaylistRound.status == RoundStatus.ACTIVE,
+    if round_id is not None:
+        target_round_id = round_id
+    else:
+        target_round_id = session.scalar(
+            select(PlaylistRound.id).where(
+                PlaylistRound.room_id == room_id,
+                PlaylistRound.status == RoundStatus.ACTIVE,
+            )
         )
-    )
-    if active_round_id is None:
+    if target_round_id is None:
         return []
 
     vote_stats = (
@@ -319,7 +355,7 @@ def get_ranked_queue(
             played_by_author.c.author_id == Track.created_by_user_id,
         )
         .where(
-            QueueItem.round_id == active_round_id,
+            QueueItem.round_id == target_round_id,
             QueueItem.state == QueueItemState.QUEUED,
             Track.moderation_status == ModerationStatus.APPROVED,
         )

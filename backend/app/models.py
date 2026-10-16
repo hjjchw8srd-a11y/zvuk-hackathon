@@ -82,13 +82,20 @@ class User(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
+    email: Mapped[str | None] = mapped_column(String(255), unique=True)
+    password_hash: Mapped[str | None] = mapped_column(String(255))
     display_name: Mapped[str | None] = mapped_column(String(100))
+    avatar_url: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
 
     memberships: Mapped[list[RoomMember]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index("ix_users_email", "email", unique=True, postgresql_where=text("email IS NOT NULL")),
     )
 
 
@@ -114,6 +121,8 @@ class Room(Base):
     is_active: Mapped[bool] = mapped_column(
         server_default=text("true"), nullable=False
     )
+    avatar_url: Mapped[str | None] = mapped_column(String(500))
+    external_link: Mapped[str | None] = mapped_column(String(500))
     queue_version: Mapped[int] = mapped_column(
         Integer, server_default=text("0"), nullable=False
     )
@@ -532,3 +541,47 @@ class Favorite(Base):
     track: Mapped[Track] = relationship()
 
     __table_args__ = (Index("ix_favorites_track_id", "track_id"),)
+
+
+class RoundTopSnapshot(Base):
+    """Immutable snapshot of the ranked queue created when a round closes."""
+
+    __tablename__ = "round_top_snapshots"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    round_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("playlist_rounds.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    room_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("rooms.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    rank: Mapped[int] = mapped_column(SmallInteger, nullable=False)
+    track_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("tracks.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    track_title: Mapped[str] = mapped_column(String(255), nullable=False)
+    track_artist: Mapped[str] = mapped_column(
+        String(255), server_default=text("''"), nullable=False
+    )
+    score: Mapped[int] = mapped_column(Integer, nullable=False)
+    fair_score: Mapped[float] = mapped_column(nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    round: Mapped[PlaylistRound] = relationship()
+    room: Mapped[Room] = relationship()
+    track: Mapped[Track | None] = relationship()
+
+    __table_args__ = (
+        Index("ix_round_top_snapshots_round_id", "round_id"),
+        Index("ix_round_top_snapshots_room_id", "room_id"),
+    )
