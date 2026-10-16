@@ -23,7 +23,7 @@ export default function App() {
             <Route path="/playlist" element={<PlaylistPage />} />
             <Route path="/library" element={<LibraryPage />} />
             <Route path="/favorites" element={<FavoritesPage />} />
-            <Route path="/community/:id" element={<CommunityPage />} />
+            <Route path="/community/:id" element={<PlaylistPage />} />
             <Route
               path="*"
               element={

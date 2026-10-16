@@ -44,13 +44,77 @@ export function AppSidebar() {
   const { open } = useSidebar();
   const { user, isAuthenticated, logout } = useAuth();
   const [communities, setCommunities] = useState([
-    { id: 1, name: "Мое сообщество", url: "/community/1" },
+    { id: 1, name: "Мое сообщество", url: "/playlist" },
   ]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isJoinOpen, setIsJoinOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
 
-  const handleCreateCommunity = (communityName) => {
+  // Загрузка реальных сообществ из бэкенда
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+    fetch("/api/me/communities", { headers })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data) {
+          const all = [...(data.created || []), ...(data.joined || [])];
+          if (all.length > 0) {
+            setCommunities(
+              all.map((c) => ({
+                id: c.id,
+                name: c.name,
+                url: `/community/${c.id}`,
+              }))
+            );
+            return;
+          }
+        }
+        // Запасной запрос в /api/bootstrap
+        return fetch("/api/bootstrap", { headers })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((bData) => {
+            if (bData?.communities?.length > 0) {
+              setCommunities(
+                bData.communities.map((c) => ({
+                  id: c.id,
+                  name: c.name,
+                  url: `/community/${c.id}`,
+                }))
+              );
+            }
+          });
+      })
+      .catch(() => {});
+  }, [user]);
+
+  const handleCreateCommunity = async (communityName) => {
+    try {
+      const token = localStorage.getItem("token");
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      const res = await fetch("/api/communities", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ name: communityName }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCommunities((prev) => [
+          ...prev,
+          {
+            id: data.id,
+            name: communityName,
+            url: `/community/${data.id}`,
+          },
+        ]);
+        return;
+      }
+    } catch {}
+
     const newId = Date.now();
     setCommunities((prev) => [
       ...prev,
@@ -66,7 +130,32 @@ export function AppSidebar() {
     setCommunities((prev) => prev.filter((item) => item.id !== idToRemove));
   };
 
-  const handleJoinByCode = (inviteCode) => {
+  const handleJoinByCode = async (inviteCode) => {
+    try {
+      const token = localStorage.getItem("token");
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      const res = await fetch("/api/join", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ code: inviteCode.trim().toUpperCase() }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCommunities((prev) => [
+          ...prev,
+          {
+            id: data.id,
+            name: `Сообщество (${inviteCode})`,
+            url: `/community/${data.id}`,
+          },
+        ]);
+        return;
+      }
+    } catch {}
+
     const newId = Date.now();
     setCommunities((prev) => [
       ...prev,
