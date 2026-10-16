@@ -8,7 +8,7 @@ const hooksPlugin = reactHooks.configs ? reactHooks : reactHooks.default;
 const refreshPlugin = reactRefresh.configs ? reactRefresh : reactRefresh.default;
 
 export default defineConfig([
-  globalIgnores(["dist"]),
+  globalIgnores(["dist", "public"]),
   {
     files: ["**/*.{js,jsx}"],
     extends: [
@@ -27,6 +27,8 @@ export default defineConfig([
     },
     rules: {
       "no-unused-vars": ["error", { varsIgnorePattern: "^[A-Z_]" }],
+      "no-empty": ["error", { allowEmptyCatch: true }],
+      "react-refresh/only-export-components": "off",
     },
   },
 ]);

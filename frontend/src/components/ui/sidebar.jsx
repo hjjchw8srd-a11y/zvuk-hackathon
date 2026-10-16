@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils";
 
 const SidebarContext = React.createContext(null);
 
-// eslint-disable-next-line react-refresh/only-export-components
 export function useSidebar() {
   const context = React.useContext(SidebarContext);
   if (!context) {

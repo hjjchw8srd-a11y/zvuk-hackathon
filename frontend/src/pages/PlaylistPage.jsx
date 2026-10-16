@@ -464,7 +464,7 @@ export function PlaylistPage() {
   // Автопереход к следующему треку
   useEffect(() => {
     if (player.progress >= 100) playerNext();
-  }, [player.progress]);
+  }, [player.progress, playerNext]);
 
   const showToast = useCallback((msg) => {
     setToast(msg);
@@ -472,7 +472,7 @@ export function PlaylistPage() {
     toastTimer.current = setTimeout(() => setToast(null), 3000);
   }, []);
 
-  const addHistory = useCallback((action, track, dir) => {
+  const addHistory = useCallback((action, track) => {
     const map = {
       vote_up:   { label: "Проголосовали «За»",     color: "#a3e635", symbol: "▲" },
       vote_down: { label: "Проголосовали «Против»",  color: "#ef4444", symbol: "▼" },
