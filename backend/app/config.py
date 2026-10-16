@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg2://track:track@localhost:5432/track"
     session_secret: str = "local-development-secret-change-me"
     uploads_dir: Path = BACKEND_DIR / "uploads"
+    app_base_url: str = ""
+    frontend_port: int = 5173
 
 
 settings = Settings()

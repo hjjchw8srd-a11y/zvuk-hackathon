@@ -28,11 +28,12 @@ app = FastAPI(title="ритм. backend", version="1.0.0")
 # ── CORS ────────────────────────────────────────────────────────────────────
 # allow_origins=["*"] + allow_credentials не работают вместе в браузере.
 # Используем allow_origin_regex, чтобы принимать запросы с любого хоста
-# локальной сети (192.168.x.x, 10.x.x.x, localhost, 127.0.0.1).
+# локальной сети (192.168.x.x, 10.x.x.x, 172.16-31.x.x, localhost, 127.0.0.1).
 app.add_middleware(
     CORSMiddleware,
     allow_origin_regex=(
-        r"http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+)"
+        r"http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|"
+        r"172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)"
         r"(:\d+)?"
     ),
     allow_credentials=True,

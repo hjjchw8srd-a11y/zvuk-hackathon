@@ -4,6 +4,7 @@ import io
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import AsyncMock, patch
 import wave
 
 from fastapi.testclient import TestClient
@@ -14,6 +15,7 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base, get_db
 from app.main import app
 from app.config import settings
+from app.services.shazam import RecognizedTrack
 
 
 class CommunityApiTests(unittest.TestCase):
@@ -53,13 +55,13 @@ class CommunityApiTests(unittest.TestCase):
         self.uploads_tempdir.cleanup()
 
     @staticmethod
-    def _wav_bytes() -> bytes:
+    def _wav_bytes(duration_seconds: float = 0.1, sample_rate: int = 8000) -> bytes:
         output = io.BytesIO()
         with wave.open(output, "wb") as audio:
             audio.setnchannels(1)
             audio.setsampwidth(2)
-            audio.setframerate(8000)
-            audio.writeframes(b"\x00\x00" * 800)
+            audio.setframerate(sample_rate)
+            audio.writeframes(b"\x00\x00" * round(duration_seconds * sample_rate))
         return output.getvalue()
 
     @staticmethod
@@ -71,7 +73,7 @@ class CommunityApiTests(unittest.TestCase):
         )
         id3 = b"ID3\x04\x00\x00" + synchsafe_size + tag
         mp3_frame = b"\xFF\xFB\x90\x64" + b"\x00" * 413
-        return id3 + mp3_frame
+        return id3 + mp3_frame * 40
 
     def _create_room(self) -> str:
         created = self.client.post(
@@ -90,6 +92,7 @@ class CommunityApiTests(unittest.TestCase):
             files={"file": ("tone.wav", content, "audio/wav")},
         )
         self.assertEqual(uploaded.status_code, 201, uploaded.text)
+        self.assertEqual(uploaded.json()["duration_seconds"], 1)
         track_id = uploaded.json()["id"]
 
         audio = self.client.get(
@@ -157,6 +160,53 @@ class CommunityApiTests(unittest.TestCase):
         )
         self.assertEqual(uploaded.status_code, 201, uploaded.text)
         self.assertEqual(uploaded.json()["format"], "mp3")
+
+    def test_upload_rejects_audio_longer_than_twenty_minutes(self) -> None:
+        room_id = self._create_room()
+        content = self._wav_bytes(duration_seconds=1201, sample_rate=8)
+        uploaded = self.client.post(
+            f"/api/communities/{room_id}/tracks/upload",
+            files={"file": ("too-long.wav", content, "audio/wav")},
+        )
+        self.assertEqual(uploaded.status_code, 413, uploaded.text)
+        self.assertIn("20 минут", uploaded.json()["detail"])
+        self.assertEqual(list(settings.uploads_dir.iterdir()), [])
+
+    def test_shazam_recognition_returns_metadata_without_storing_file(self) -> None:
+        room_id = self._create_room()
+        recognized = RecognizedTrack(
+            title="Midnight City",
+            artist="M83",
+            genre="Alternative",
+            cover_url="https://example.test/cover.jpg",
+            shazam_url="https://www.shazam.com/track/example",
+        )
+        with patch(
+            "app.routers.communities.recognize_audio",
+            new=AsyncMock(return_value=recognized),
+        ) as recognize:
+            response = self.client.post(
+                f"/api/communities/{room_id}/tracks/recognize",
+                files={"file": ("sample.wav", self._wav_bytes(), "audio/wav")},
+            )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["title"], "Midnight City")
+        self.assertEqual(response.json()["artist"], "M83")
+        recognize.assert_awaited_once()
+        self.assertEqual(list(settings.uploads_dir.iterdir()), [])
+
+    def test_bootstrap_exposes_lan_url_for_qr_invite(self) -> None:
+        with patch(
+            "app.routers.communities.frontend_base_url",
+            return_value="http://192.168.1.42:5173",
+        ):
+            bootstrap = self.client.get("/api/bootstrap")
+        self.assertEqual(bootstrap.status_code, 200)
+        self.assertEqual(
+            bootstrap.json()["sharing"]["base_url"],
+            "http://192.168.1.42:5173",
+        )
 
     def test_frontend_happy_path(self) -> None:
         bootstrap = self.client.get("/api/bootstrap")

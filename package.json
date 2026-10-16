@@ -15,7 +15,7 @@
   "author": "Roman",
   "scripts": {
     "dev": "npm run dev --prefix frontend",
-    "dev:backend": "python -m uvicorn app.main:app --reload --port 8000 --app-dir backend",
+    "dev:backend": "python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 --app-dir backend",
     "build": "npm run build --prefix frontend"
   }
 }

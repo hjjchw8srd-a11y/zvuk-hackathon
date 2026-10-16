@@ -7,10 +7,14 @@ import secrets
 import uuid
 from collections import Counter
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
+import math
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
+from mutagen import File as MutagenFile
+from mutagen import MutagenError
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -18,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.auth import get_current_user
 from app.config import BACKEND_DIR, settings
 from app.database import get_db
+from app.network import frontend_base_url
 from app.models import (
     Favorite,
     MemberRole,
@@ -45,10 +50,16 @@ from app.services import (
     create_playlist_round,
     get_ranked_queue,
 )
+from app.services.shazam import (
+    RecognitionNotFound,
+    RecognitionUnavailable,
+    recognize_audio,
+)
 
 
 router = APIRouter(prefix="/api", tags=["communities"])
 MAX_AUDIO_SIZE = 15 * 1024 * 1024
+MAX_AUDIO_DURATION_SECONDS = 20 * 60
 INVITE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 AUDIO_MIME_TYPES = {
     "mp3": "audio/mpeg",
@@ -56,7 +67,6 @@ AUDIO_MIME_TYPES = {
     "ogg": "audio/ogg",
     "m4a": "audio/mp4",
     "aac": "audio/aac",
-    "webm": "audio/webm",
     "flac": "audio/flac",
 }
 
@@ -218,6 +228,11 @@ def bootstrap(
             for room, role in memberships
         ],
         "library": LIBRARY,
+        "sharing": {
+            "base_url": frontend_base_url(),
+            "configured": bool(settings.app_base_url.strip()),
+            "same_network_required": True,
+        },
     }
 
 
@@ -579,8 +594,6 @@ def _detect_audio_format(content: bytes) -> str | None:
         return "flac"
     if content[4:8] == b"ftyp":
         return "m4a"
-    if content[:4] == b"\x1aE\xdf\xa3":
-        return "webm"
     if len(content) > 2 and content[0] == 0xFF and content[1] & 0xF6 == 0xF0:
         return "aac"
     if _has_mp3_frame(content):
@@ -588,18 +601,26 @@ def _detect_audio_format(content: bytes) -> str | None:
     return None
 
 
-@router.post("/communities/{room_id}/tracks/upload", status_code=201)
-async def upload_track(
-    room_id: uuid.UUID,
-    file: UploadFile = File(...),
-    title: str = Form(default=""),
-    artist: str = Form(default=""),
-    genre: str = Form(default=""),
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    room = _room(db, room_id)
-    membership = _member(db, room_id, user.id)
+def _audio_duration_seconds(content: bytes) -> int:
+    try:
+        audio = MutagenFile(BytesIO(content))
+        length = float(audio.info.length) if audio is not None and audio.info else 0.0
+    except (MutagenError, OSError, ValueError, TypeError, AttributeError):
+        length = 0.0
+    if not math.isfinite(length) or length <= 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Не удалось определить длительность аудио. Перекодируйте файл в MP3, WAV, OGG, M4A, AAC или FLAC",
+        )
+    if length > MAX_AUDIO_DURATION_SECONDS:
+        raise HTTPException(
+            status_code=413,
+            detail="Длительность трека не должна превышать 20 минут",
+        )
+    return max(1, round(length))
+
+
+async def _read_valid_audio(file: UploadFile) -> tuple[bytes, str, int]:
     content = await file.read(MAX_AUDIO_SIZE + 1)
     if len(content) < 100 or len(content) > MAX_AUDIO_SIZE:
         raise HTTPException(status_code=413, detail="Размер файла должен быть от 100 байт до 15 МБ")
@@ -615,8 +636,51 @@ async def upload_track(
     if detected_format is None:
         raise HTTPException(
             status_code=400,
-            detail="Браузер не сможет воспроизвести этот файл: поддерживаются MP3, WAV, OGG, M4A, AAC, WebM и FLAC",
+            detail="Браузер не сможет воспроизвести этот файл: поддерживаются MP3, WAV, OGG, M4A, AAC и FLAC",
         )
+    return content, detected_format, _audio_duration_seconds(content)
+
+
+@router.post("/communities/{room_id}/tracks/recognize")
+async def recognize_track(
+    room_id: uuid.UUID,
+    file: UploadFile = File(...),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    _room(db, room_id)
+    _member(db, room_id, user.id)
+    content, detected_format, duration_seconds = await _read_valid_audio(file)
+    try:
+        result = await recognize_audio(content)
+    except RecognitionNotFound as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except RecognitionUnavailable as error:
+        raise HTTPException(status_code=503, detail=str(error)) from error
+    return {
+        "title": result.title,
+        "artist": result.artist,
+        "genre": result.genre,
+        "cover_url": result.cover_url,
+        "shazam_url": result.shazam_url,
+        "format": detected_format,
+        "duration_seconds": duration_seconds,
+    }
+
+
+@router.post("/communities/{room_id}/tracks/upload", status_code=201)
+async def upload_track(
+    room_id: uuid.UUID,
+    file: UploadFile = File(...),
+    title: str = Form(default=""),
+    artist: str = Form(default=""),
+    genre: str = Form(default=""),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    room = _room(db, room_id)
+    membership = _member(db, room_id, user.id)
+    content, detected_format, duration_seconds = await _read_valid_audio(file)
     stem = re.sub(r"[_]+", " ", Path(file.filename or "track").stem)
     parts = re.split(r"\s+[-–—]\s+", stem, maxsplit=1)
     parsed_artist, parsed_title = (parts[0], parts[1]) if len(parts) == 2 else ("Неизвестный артист", stem)
@@ -626,7 +690,7 @@ async def upload_track(
     uploads.mkdir(parents=True, exist_ok=True)
     destination = uploads / stored_name
     destination.write_bytes(content)
-    track = Track(room_id=room_id, title=_clean(title or parsed_title, 255), artist=_clean(artist or parsed_artist, 255), genre=_clean(genre, 100), source_type=TrackSource.UPLOAD, storage_key=stored_name, original_filename=file.filename, mime_type=AUDIO_MIME_TYPES[detected_format], size_bytes=len(content), moderation_status=status, created_by_user_id=user.id)
+    track = Track(room_id=room_id, title=_clean(title or parsed_title, 255), artist=_clean(artist or parsed_artist, 255), genre=_clean(genre, 100), duration_seconds=duration_seconds, source_type=TrackSource.UPLOAD, storage_key=stored_name, original_filename=file.filename, mime_type=AUDIO_MIME_TYPES[detected_format], size_bytes=len(content), moderation_status=status, created_by_user_id=user.id)
     try:
         db.add(track)
         db.flush()
@@ -637,7 +701,7 @@ async def upload_track(
         db.rollback()
         destination.unlink(missing_ok=True)
         raise
-    return {"id": track.id, "status": status.value, "format": detected_format, "metadata": {"title": track.title, "artist": track.artist}}
+    return {"id": track.id, "status": status.value, "format": detected_format, "duration_seconds": duration_seconds, "metadata": {"title": track.title, "artist": track.artist}}
 
 
 @router.get("/communities/{room_id}/tracks/{track_id}/audio")
