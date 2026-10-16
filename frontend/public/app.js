@@ -69,8 +69,8 @@ function render(){
 function renderOnboarding(){
   $('#page').innerHTML=`<div class="onboarding"><section class="onboard-hero"><div class="eyebrow">ПЛЕЙЛИСТ, КОТОРЫЙ СОЗДАЁТЕ ВЫ</div><h1>У вашей группы<br>появится свой звук.</h1><p>Пригласите одногруппников, собирайте композиции вместе и выбирайте, что прозвучит следующим.</p><div class="onboard-actions"><button class="button button-lime" data-action="create">＋ Создать сообщество</button><button class="button button-light" data-action="join">Войти по приглашению</button></div><div class="onboard-art"><div class="vinyl"></div></div></section>${features()}</div>`;
 }
-const ART_COLORS={dawn:'#75542c',city:'#674296',orbit:'#276b74',rain:'#42652e',night:'#8e3e63',sea:'#9a7431'};
-function cover(t,large=false){const key=t.library_key||t.key||'upload';return `<span class="${large?'now-art':'cover'} art-${esc(key)}" style="--art-color:${ART_COLORS[key]||'#33554b'}"><span class="art-orbits"><i></i><i></i><i></i><i></i></span><span class="art-wave">ıııııı</span></span>`}
+const ART_COLORS={dawn:'#75542c',city:'#674296',orbit:'#276b74',rain:'#4e2e65',night:'#8e3e63',sea:'#9a7431'};
+function cover(t,large=false){const key=t.library_key||t.key||'upload';return `<span class="${large?'now-art':'cover'} art-${esc(key)}" style="--art-color:${ART_COLORS[key]||'#473355'}"><span class="art-orbits"><i></i><i></i><i></i><i></i></span><span class="art-wave">ıııııı</span></span>`}
 function trackRow(t,i){
   const queued=t.status==='approved'&&(!t.queue_state||t.queue_state==='queued');
   const playable=t.status==='approved'&&t.queue_state!=='removed';
@@ -83,7 +83,7 @@ function renderOverview(){
   const activity=d.dashboard?.activity||[];
   const series=activity.slice(-7),total=series.reduce((sum,x)=>sum+Number(x[S.metric]||0),0),max=Math.max(4,...series.map(x=>Number(x[S.metric]||0)));
   const genres=d.dashboard?.genres||[],genreTotal=genres.reduce((n,g)=>n+g.count,0);
-  const colors=['#b9ed7d','#8f7adb','#79bdb2','#db9e74','#d9c76c','#7198d6'];
+  const colors=['#be7ded','#8f7adb','#79bdb2','#db9e74','#d9c76c','#7198d6'];
   const contributors=d.dashboard?.contributors||[];
   $('#page').innerHTML=`<div class="page-heading"><div><div class="eyebrow">НА ОДНОЙ ВОЛНЕ</div><h1>Твой музыкальный <em>дом.</em></h1><p>${esc(c.name)} · Здесь звучит выбор каждого</p></div><button class="button button-light" data-action="invite">${icon('<path d="M12 16V3m-4 4 4-4 4 4M4 14v6h16v-6"/>')} Пригласить друзей</button></div>
   <div class="stats-grid"><div class="stat-card"><span class="stat-icon lime">♫</span><span class="stat-label">Треков в очереди</span><strong>${stats.queued??tracks.length}</strong><span class="metric-change">Общий музыкальный выбор</span></div><div class="stat-card"><span class="stat-icon pink">${icon('<circle cx="9" cy="8" r="3"/><path d="M3 20v-2a6 6 0 0 1 12 0v2M17 5a3 3 0 0 1 0 6m0 3a5 5 0 0 1 4 5"/>')}</span><span class="stat-label">Участников</span><strong>${stats.members??d.members.length}</strong><span class="metric-change">Разные вкусы. Один плейлист.</span></div><div class="stat-card"><span class="stat-icon blue">↗</span><span class="stat-label">Голосов в этой ротации</span><strong>${stats.votes??0}</strong><span class="metric-change">Каждый голос имеет значение</span></div></div>
