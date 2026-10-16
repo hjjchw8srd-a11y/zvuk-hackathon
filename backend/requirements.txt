@@ -7,4 +7,3 @@ pydantic-settings>=2.11.0
 alembic>=1.16.0
 python-multipart>=0.0.20
 mutagen>=1.47.0
-shazamio>=0.8.1,<0.9

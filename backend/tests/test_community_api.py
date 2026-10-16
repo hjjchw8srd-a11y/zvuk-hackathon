@@ -4,7 +4,7 @@ import io
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 import wave
 
 from fastapi.testclient import TestClient
@@ -15,7 +15,6 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base, get_db
 from app.main import app
 from app.config import settings
-from app.services.shazam import RecognizedTrack
 
 
 class CommunityApiTests(unittest.TestCase):
@@ -170,30 +169,6 @@ class CommunityApiTests(unittest.TestCase):
         )
         self.assertEqual(uploaded.status_code, 413, uploaded.text)
         self.assertIn("20 минут", uploaded.json()["detail"])
-        self.assertEqual(list(settings.uploads_dir.iterdir()), [])
-
-    def test_shazam_recognition_returns_metadata_without_storing_file(self) -> None:
-        room_id = self._create_room()
-        recognized = RecognizedTrack(
-            title="Midnight City",
-            artist="M83",
-            genre="Alternative",
-            cover_url="https://example.test/cover.jpg",
-            shazam_url="https://www.shazam.com/track/example",
-        )
-        with patch(
-            "app.routers.communities.recognize_audio",
-            new=AsyncMock(return_value=recognized),
-        ) as recognize:
-            response = self.client.post(
-                f"/api/communities/{room_id}/tracks/recognize",
-                files={"file": ("sample.wav", self._wav_bytes(), "audio/wav")},
-            )
-
-        self.assertEqual(response.status_code, 200, response.text)
-        self.assertEqual(response.json()["title"], "Midnight City")
-        self.assertEqual(response.json()["artist"], "M83")
-        recognize.assert_awaited_once()
         self.assertEqual(list(settings.uploads_dir.iterdir()), [])
 
     def test_bootstrap_exposes_lan_url_for_qr_invite(self) -> None:

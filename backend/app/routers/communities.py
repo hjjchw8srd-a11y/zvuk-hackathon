@@ -50,13 +50,6 @@ from app.services import (
     create_playlist_round,
     get_ranked_queue,
 )
-from app.services.shazam import (
-    RecognitionNotFound,
-    RecognitionUnavailable,
-    recognize_audio,
-)
-
-
 router = APIRouter(prefix="/api", tags=["communities"])
 MAX_AUDIO_SIZE = 15 * 1024 * 1024
 MAX_AUDIO_DURATION_SECONDS = 20 * 60
@@ -639,33 +632,6 @@ async def _read_valid_audio(file: UploadFile) -> tuple[bytes, str, int]:
             detail="Браузер не сможет воспроизвести этот файл: поддерживаются MP3, WAV, OGG, M4A, AAC и FLAC",
         )
     return content, detected_format, _audio_duration_seconds(content)
-
-
-@router.post("/communities/{room_id}/tracks/recognize")
-async def recognize_track(
-    room_id: uuid.UUID,
-    file: UploadFile = File(...),
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    _room(db, room_id)
-    _member(db, room_id, user.id)
-    content, detected_format, duration_seconds = await _read_valid_audio(file)
-    try:
-        result = await recognize_audio(content)
-    except RecognitionNotFound as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-    except RecognitionUnavailable as error:
-        raise HTTPException(status_code=503, detail=str(error)) from error
-    return {
-        "title": result.title,
-        "artist": result.artist,
-        "genre": result.genre,
-        "cover_url": result.cover_url,
-        "shazam_url": result.shazam_url,
-        "format": detected_format,
-        "duration_seconds": duration_seconds,
-    }
 
 
 @router.post("/communities/{room_id}/tracks/upload", status_code=201)

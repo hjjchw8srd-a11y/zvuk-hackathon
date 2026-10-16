@@ -136,7 +136,7 @@ function modal(type,prefill=''){
   }
   const titles={create:['Новое сообщество','Соберите группу вокруг музыки. Позже вы сможете пригласить участников по коду.'],join:['Войти по приглашению','Введите шестизначный код, который вам отправили.'],upload:['Загрузить композицию','Аудиофайл сохранится в хранилище сообщества. Максимум 15 МБ и 20 минут.']};
   const [title,sub]=titles[type];
-  const fields=type==='create'?`<div class="field"><label for="community-name">Название сообщества *</label><input id="community-name" name="name" placeholder="Например, Дизайн 2026" minlength="3" maxlength="70" required autofocus></div><div class="field"><label for="faculty">Группа или факультет</label><input id="faculty" name="faculty" placeholder="Например, Факультет дизайна" maxlength="90"></div><div class="field"><label for="description">О вашем сообществе</label><textarea id="description" name="description" placeholder="Пара слов о вашей группе" maxlength="260"></textarea></div>`:type==='join'?`<div class="field"><label for="join-code">Код приглашения *</label><input id="join-code" name="code" value="${esc(prefill)}" placeholder="Например, ABC123" minlength="6" maxlength="12" required autofocus style="text-transform:uppercase;letter-spacing:3px;font-weight:800"></div>`:`<div class="field"><label for="upload-title">Название</label><input id="upload-title" name="title" placeholder="Определим по имени файла" maxlength="100"></div><div class="field"><label for="upload-artist">Исполнитель</label><input id="upload-artist" name="artist" placeholder="Исполнитель или группа" maxlength="80"></div><div class="field"><label for="upload-genre">Жанр</label><input id="upload-genre" name="genre" placeholder="Например, инди" maxlength="50"></div><div class="field"><label>Аудиофайл *</label><div class="file-drop"><strong>♫ Выберите файл</strong><input name="file" type="file" accept=".mp3,.wav,.ogg,.m4a,.aac,.flac,audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/aac,audio/flac" required><small>MP3, WAV, OGG, M4A, AAC или FLAC · до 15 МБ и 20 минут</small></div></div><div class="recognize-box"><button class="button button-light" type="button" data-action="shazam-recognize">⌁ Распознать через Shazam</button><small>Название, исполнитель и жанр заполнятся автоматически. Для распознавания используется короткий аудиоотпечаток.</small></div>`;
+  const fields=type==='create'?`<div class="field"><label for="community-name">Название сообщества *</label><input id="community-name" name="name" placeholder="Например, Дизайн 2026" minlength="3" maxlength="70" required autofocus></div><div class="field"><label for="faculty">Группа или факультет</label><input id="faculty" name="faculty" placeholder="Например, Факультет дизайна" maxlength="90"></div><div class="field"><label for="description">О вашем сообществе</label><textarea id="description" name="description" placeholder="Пара слов о вашей группе" maxlength="260"></textarea></div>`:type==='join'?`<div class="field"><label for="join-code">Код приглашения *</label><input id="join-code" name="code" value="${esc(prefill)}" placeholder="Например, ABC123" minlength="6" maxlength="12" required autofocus style="text-transform:uppercase;letter-spacing:3px;font-weight:800"></div>`:`<div class="field"><label for="upload-title">Название</label><input id="upload-title" name="title" placeholder="Определим по имени файла" maxlength="100"></div><div class="field"><label for="upload-artist">Исполнитель</label><input id="upload-artist" name="artist" placeholder="Исполнитель или группа" maxlength="80"></div><div class="field"><label for="upload-genre">Жанр</label><input id="upload-genre" name="genre" placeholder="Например, инди" maxlength="50"></div><div class="field"><label>Аудиофайл *</label><div class="file-drop"><strong>♫ Выберите файл</strong><input name="file" type="file" accept=".mp3,.wav,.ogg,.m4a,.aac,.flac,audio/mpeg,audio/wav,audio/ogg,audio/mp4,audio/aac,audio/flac" required><small>MP3, WAV, OGG, M4A, AAC или FLAC · до 15 МБ и 20 минут</small></div></div>`;
   $('#modal-root').innerHTML=`<div class="modal-backdrop" data-action="close-modal"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><div class="modal-head"><div><h2 id="modal-title">${title}</h2><p>${sub}</p></div><button class="modal-close" type="button" data-action="close-modal" aria-label="Закрыть">×</button></div><form id="modal-form" data-type="${type}" class="modal-body">${fields}<div class="modal-actions"><button class="button button-light" type="button" data-action="close-modal">Отмена</button><button class="button button-primary" type="submit">${type==='create'?'Создать сообщество':type==='join'?'Войти':'Загрузить трек'} →</button></div></form></div></div>`;
   $('#modal-root input[autofocus]')?.focus();
 }
@@ -145,19 +145,6 @@ async function refresh(){if(S.communityId)S.data=await request(communityPath());
 async function doVote(id,value){const t=S.data.tracks.find(x=>x.id===id);if(!t)return;const next=Number(t.my_vote)===value?0:value;await post(communityPath(`tracks/${id}/vote`),{value:next});await refresh()}
 async function doModerate(id,status){await post(communityPath(`tracks/${id}/moderate`),['remove','restore'].includes(status)?{action:status}:{status});S.logs=await request(communityPath('moderation'));await refresh();toast('Очередь обновлена')}
 async function copyInvite(){const link=inviteLink();try{await navigator.clipboard.writeText(link);toast('Ссылка-приглашение скопирована')}catch{toast(`Код приглашения: ${S.data.community.invite_code}`)}}
-async function recognizeSelectedFile(button){
-  const form=$('#modal-form'),file=form?.elements.file?.files?.[0];
-  await validateAudioFile(file);
-  const oldText=button.textContent;button.disabled=true;button.textContent='Shazam слушает…';
-  try{
-    const body=new FormData();body.append('file',file);
-    const found=await request(communityPath('tracks/recognize'),{method:'POST',body});
-    form.elements.title.value=found.title||form.elements.title.value;
-    form.elements.artist.value=found.artist||form.elements.artist.value;
-    form.elements.genre.value=found.genre||form.elements.genre.value;
-    toast(`Shazam: ${found.artist?found.artist+' — ':''}${found.title}`);
-  }finally{button.disabled=false;button.textContent=oldText}
-}
 const audioController=new AudioController({onTick:updateProgress,onEnded:completeTrack,onError:message=>{S.playing=false;renderPlayer();toast(message,true)}});
 function stopAudio(){audioController.stop();S.playing=false}
 async function playTrack(id){
@@ -242,7 +229,6 @@ document.addEventListener('click',async event=>{
     else if(action==='add-library'){const result=await post(communityPath('tracks/library'),{key});await refresh();toast(result.status==='pending'?'Трек отправлен на модерацию':'Трек добавлен в плейлист')}
     else if(action==='moderate')await doModerate(id,status);
     else if(action==='copy-invite')await copyInvite();
-    else if(action==='shazam-recognize')await recognizeSelectedFile(button);
     else if(action==='play')await playTrack(id);
     else if(action==='play-top')await playTop();
     else if(action==='toggle-play'){if(S.playing)pausePlayer();else await resumePlayer()}
