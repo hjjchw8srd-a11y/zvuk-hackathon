@@ -8,7 +8,7 @@ const hooksPlugin = reactHooks.configs ? reactHooks : reactHooks.default;
 const refreshPlugin = reactRefresh.configs ? reactRefresh : reactRefresh.default;
 
 export default defineConfig([
-  globalIgnores(["dist", "public/vendor/**"]),
+  globalIgnores(["dist"]),
   {
     files: ["**/*.{js,jsx}"],
     extends: [
@@ -18,12 +18,7 @@ export default defineConfig([
     ],
     languageOptions: {
       ecmaVersion: 2020,
-      globals: {
-        ...globals.browser,
-        AudioController: "readonly",
-        VolnaAPI: "readonly",
-        qrcode: "readonly",
-      },
+      globals: globals.browser,
       parserOptions: {
         ecmaVersion: "latest",
         ecmaFeatures: { jsx: true },
