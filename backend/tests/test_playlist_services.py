@@ -30,6 +30,7 @@ from app.services import (
     cast_vote,
     complete_current_and_play_next,
     create_playlist_round,
+    fairness_penalty,
     get_ranked_queue,
 )
 
@@ -184,13 +185,14 @@ class PlaylistServiceTests(unittest.TestCase):
             )
         )
         cast_vote(self.session, penalized_item.id, self.member.id, 1)
+        cast_vote(self.session, member_item.id, self.owner.id, 1)
         self.session.commit()
 
         ranked = get_ranked_queue(self.session, self.room.id, now=NOW)
         self.assertEqual(ranked[0].queue_item.id, member_item.id)
-        self.assertEqual(ranked[0].fair_score, 0)
+        self.assertEqual(ranked[0].fair_score, 1)
         self.assertEqual(ranked[1].queue_item.id, penalized_item.id)
-        self.assertEqual(ranked[1].fair_score, -1.0)
+        self.assertEqual(ranked[1].fair_score, 0)
 
         previous, current = complete_current_and_play_next(
             self.session, self.room.id, self.owner.id, now=NOW
@@ -212,6 +214,12 @@ class PlaylistServiceTests(unittest.TestCase):
         self.assertEqual(previous.state, QueueItemState.PLAYED)
         self.assertEqual(current.id, penalized_item.id)
         self.assertEqual(current.state, QueueItemState.PLAYING)
+
+    def test_fairness_penalty_is_gentle_and_capped(self) -> None:
+        self.assertEqual(
+            [fairness_penalty(count) for count in range(8)],
+            [0, 1, 1, 2, 2, 3, 3, 3],
+        )
 
     def test_database_rejects_two_playing_items_in_one_round(self) -> None:
         self._round()

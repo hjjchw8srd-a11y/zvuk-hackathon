@@ -32,7 +32,18 @@ from app.models import (
 )
 
 
-FAIRNESS_PENALTY = 2.0
+FAIRNESS_PLAYS_PER_POINT = 2
+FAIRNESS_MAX_PENALTY = 3
+
+
+def fairness_penalty(played_count: int) -> int:
+    """Apply one penalty point per two plays, capped so votes stay dominant."""
+    if played_count <= 0:
+        return 0
+    return min(
+        FAIRNESS_MAX_PENALTY,
+        (played_count + FAIRNESS_PLAYS_PER_POINT - 1) // FAIRNESS_PLAYS_PER_POINT,
+    )
 
 
 class PlaylistError(Exception):
@@ -240,7 +251,6 @@ def get_ranked_queue(
     *,
     current_user_id: uuid.UUID | None = None,
     now: datetime | None = None,
-    penalty_factor: float = FAIRNESS_PENALTY,
 ) -> list[RankedQueueItem]:
     """Return the active queue sorted by fair score and insertion time."""
 
@@ -324,7 +334,7 @@ def get_ranked_queue(
         queue_item, track = row[0], row[1]
         upvotes, downvotes, played_count = int(row[2]), int(row[3]), int(row[4])
         score = upvotes - downvotes
-        fair_score = round(score - played_count * penalty_factor, 2)
+        fair_score = float(score - fairness_penalty(played_count))
         ranked.append(
             RankedQueueItem(
                 queue_item=queue_item,

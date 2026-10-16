@@ -9,6 +9,7 @@ from app.services.playlist import (
     cast_vote,
     complete_current_and_play_next,
     create_playlist_round,
+    fairness_penalty,
     get_ranked_queue,
     weekly_round_key,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "cast_vote",
     "complete_current_and_play_next",
     "create_playlist_round",
+    "fairness_penalty",
     "get_ranked_queue",
     "weekly_round_key",
 ]
