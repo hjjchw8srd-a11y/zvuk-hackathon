@@ -11,14 +11,12 @@ import {
   Play, Pause, SkipBack, SkipForward, Music, Plus, Search,
   Copy, Check, Users, History, ShieldCheck, Trash2,
   CheckCircle, XCircle, Upload, ChevronUp, ChevronDown,
-  Minus, Crown, UserPlus, Image as ImageIcon,
+  Minus, Crown, UserPlus, Image as ImageIcon, Heart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { audioService } from "@/lib/audioService";
 
 // ─── Заготовки под будущий бэкенд (когда появится авторизация и API) ────────
-// В будущем эти данные будут поступать из API-запросов / контекста авторизации:
-// const { user, isAuthenticated } = useAuth();
-// const { data: userPlaylists } = useUserPlaylists();
 const DEFAULT_USER = {
   id: "u1",
   name: "Алексей М.",
@@ -37,29 +35,17 @@ const DEFAULT_PLAYLIST = {
   customCover: null,
 };
 
-// ─── Mock-данные треков ───────────────────────────────────────────────────────
-const INITIAL_TRACKS = [
-  { id: 1,  title: "Starboy",             artist: "The Weeknd",                  duration: "3:50", proposer: "@alex_m",  votes: 42, gradient: "from-violet-600 to-purple-800", userVote: 0, prevRank: 1 },
-  { id: 2,  title: "Blinding Lights",     artist: "The Weeknd",                  duration: "3:20", proposer: "@kate_p",  votes: 38, gradient: "from-pink-500 to-rose-700",      userVote: 0, prevRank: 2 },
-  { id: 3,  title: "As It Was",           artist: "Harry Styles",                duration: "2:37", proposer: "@dima_k",  votes: 31, gradient: "from-sky-400 to-cyan-600",       userVote: 0, prevRank: 3 },
-  { id: 4,  title: "Levitating",          artist: "Dua Lipa",                    duration: "3:23", proposer: "@masha_r", votes: 25, gradient: "from-emerald-400 to-teal-600",   userVote: 0, prevRank: 4 },
-  { id: 5,  title: "Stay",                artist: "The Kid LAROI, Justin Bieber", duration: "2:21", proposer: "@petya_z", votes: 19, gradient: "from-amber-400 to-orange-600", userVote: 0, prevRank: 5 },
-  { id: 6,  title: "Heat Waves",          artist: "Glass Animals",               duration: "3:59", proposer: "@anya_s",  votes: 14, gradient: "from-fuchsia-500 to-purple-700", userVote: 0, prevRank: 6 },
-  { id: 7,  title: "Montero",             artist: "Lil Nas X",                   duration: "2:17", proposer: "@kolya_v", votes: 9,  gradient: "from-yellow-400 to-pink-500",    userVote: 0, prevRank: 7 },
-];
-
-const INITIAL_MOD_QUEUE = [
-  { id: 101, title: "Flowers",   artist: "Miley Cyrus",  duration: "3:20", proposer: "@lena_b", gradient: "from-lime-400 to-emerald-600" },
-  { id: 102, title: "Anti-Hero", artist: "Taylor Swift", duration: "3:20", proposer: "@igor_n", gradient: "from-green-400 to-teal-500"   },
-  { id: 103, title: "Die For You", artist: "The Weeknd", duration: "4:20", proposer: "@vova_k", gradient: "from-sky-300 to-blue-500"     },
-];
+// ─── Начальные списки (пустые для новых комнат, заполняются из API) ──────────
+const INITIAL_TRACKS = [];
+const INITIAL_MOD_QUEUE = [];
 
 const LIBRARY_TRACKS = [
-  { id: "l1", title: "Bohemian Rhapsody",       artist: "Queen",           duration: "5:54", gradient: "from-violet-600 to-purple-800" },
-  { id: "l2", title: "Thriller",                artist: "Michael Jackson", duration: "5:57", gradient: "from-pink-500 to-rose-700"     },
-  { id: "l3", title: "Smells Like Teen Spirit", artist: "Nirvana",         duration: "5:01", gradient: "from-sky-400 to-cyan-600"      },
-  { id: "l4", title: "Hotel California",        artist: "Eagles",          duration: "6:30", gradient: "from-amber-400 to-orange-600"  },
-  { id: "l5", title: "Purple Rain",             artist: "Prince",          duration: "8:41", gradient: "from-fuchsia-500 to-purple-700"},
+  { id: "dawn", key: "dawn", title: "Первые лучи", artist: "Volna Studio", genre: "Эмбиент", duration: "0:48", duration_seconds: 48, gradient: "from-amber-500 to-orange-700" },
+  { id: "city", key: "city", title: "После пар", artist: "Volna Studio", genre: "Лоу-фай", duration: "0:56", duration_seconds: 56, gradient: "from-violet-600 to-indigo-800" },
+  { id: "orbit", key: "orbit", title: "Орбита", artist: "Volna Studio", genre: "Электроника", duration: "0:52", duration_seconds: 52, gradient: "from-cyan-500 to-blue-700" },
+  { id: "rain", key: "rain", title: "Тихий двор", artist: "Volna Studio", genre: "Инди", duration: "0:44", duration_seconds: 44, gradient: "from-emerald-500 to-teal-700" },
+  { id: "night", key: "night", title: "Ночной маршрут", artist: "Volna Studio", genre: "Синтвейв", duration: "1:00", duration_seconds: 60, gradient: "from-pink-500 to-rose-700" },
+  { id: "sea", key: "sea", title: "Морской бриз", artist: "Volna Studio", genre: "Чилаут", duration: "0:50", duration_seconds: 50, gradient: "from-teal-400 to-cyan-600" },
 ];
 
 const LAST_WEEK = [
@@ -130,7 +116,7 @@ function VoteBlock({ track, onVote }) {
   );
 }
 
-function TrackRow({ track, rank, isPlaying, canModerate, onPlay, onVote, onDelete }) {
+function TrackRow({ track, rank, isPlaying, canModerate, onPlay, onVote, onFavorite, onDelete }) {
   const delta = (track.prevRank || rank) - rank;
   return (
     <div className={cn(
@@ -152,8 +138,11 @@ function TrackRow({ track, rank, isPlaying, canModerate, onPlay, onVote, onDelet
 
       <div className="relative cursor-pointer shrink-0" onClick={() => onPlay(track.id)}>
         <TrackThumb gradient={track.gradient} size={44} />
-        <div className="absolute inset-0 rounded-xl bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-          {isPlaying ? <Pause size={16} className="text-white" /> : <Play size={16} className="text-white fill-white" />}
+        <div className={cn(
+          "absolute inset-0 rounded-xl bg-black/60 flex items-center justify-center transition-opacity",
+          isPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+        )}>
+          {isPlaying ? <Pause size={16} className="text-[#a3e635] fill-[#a3e635]" /> : <Play size={16} className="text-white fill-white" />}
         </div>
       </div>
 
@@ -166,6 +155,22 @@ function TrackRow({ track, rank, isPlaying, canModerate, onPlay, onVote, onDelet
       </div>
 
       <span className="text-xs text-neutral-500 tabular-nums hidden sm:block shrink-0">{track.duration}</span>
+
+      {/* Кнопка Добавить в избранное */}
+      <button
+        type="button"
+        onClick={() => onFavorite?.(track.id)}
+        className={cn(
+          "w-7 h-7 rounded-lg flex items-center justify-center transition-all shrink-0 cursor-pointer",
+          track.is_favorite
+            ? "text-rose-500 hover:text-rose-400"
+            : "text-neutral-500 hover:text-rose-400 opacity-0 group-hover:opacity-100"
+        )}
+        title={track.is_favorite ? "В избранном" : "Добавить в избранное"}
+      >
+        <Heart size={14} className={track.is_favorite ? "fill-rose-500" : ""} />
+      </button>
+
       <VoteBlock track={track} onVote={onVote} />
 
       {canModerate && (
@@ -320,12 +325,12 @@ export function PlaylistPage() {
   }, [routeRoomId, authUser]);
 
   // Загрузка состояния плейлиста и треков из API
-  useEffect(() => {
-    if (!currentRoomId) return;
+  const fetchCommunityData = useCallback((roomId) => {
+    if (!roomId) return;
     const token = localStorage.getItem("token");
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
-    fetch(`/api/communities/${currentRoomId}`, { headers })
+    fetch(`/api/communities/${roomId}`, { headers })
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
         if (!data?.community) return;
@@ -361,7 +366,7 @@ export function PlaylistPage() {
           );
         }
 
-        if (Array.isArray(data.tracks) && data.tracks.length > 0) {
+        if (Array.isArray(data.tracks)) {
           const grads = [
             "from-violet-600 to-purple-800",
             "from-pink-500 to-rose-700",
@@ -378,16 +383,21 @@ export function PlaylistPage() {
               id: t.id,
               title: t.title,
               artist: t.artist,
+              genre: t.genre,
+              source_type: t.source_type,
+              library_key: t.library_key,
+              is_favorite: t.is_favorite ?? false,
               duration: t.duration_seconds
                 ? `${Math.floor(t.duration_seconds / 60)}:${fmt2(t.duration_seconds % 60)}`
-                : "3:30",
+                : "0:45",
+              duration_seconds: t.duration_seconds || 45,
               proposer: t.created_by_name ? `@${t.created_by_name}` : "@volna",
               votes: t.score ?? 0,
               userVote: t.user_vote ?? 0,
               gradient: grads[idx % grads.length],
               prevRank: idx + 1,
             }));
-          if (active.length > 0) setTracks(active);
+          setTracks(active);
 
           const pending = data.tracks
             .filter((t) => t.status === "pending")
@@ -395,19 +405,23 @@ export function PlaylistPage() {
               id: t.id,
               title: t.title,
               artist: t.artist,
+              genre: t.genre,
+              source_type: t.source_type,
+              library_key: t.library_key,
               duration: t.duration_seconds
                 ? `${Math.floor(t.duration_seconds / 60)}:${fmt2(t.duration_seconds % 60)}`
-                : "3:30",
+                : "0:45",
+              duration_seconds: t.duration_seconds || 45,
               proposer: t.created_by_name ? `@${t.created_by_name}` : "@участник",
               gradient: grads[(idx + 2) % grads.length],
             }));
-          if (pending.length > 0) setModQueue(pending);
+          setModQueue(pending);
         }
       })
       .catch(() => {});
 
     // Загрузка снимков топа прошлых ротаций
-    fetch(`/api/communities/${currentRoomId}/top-history`, { headers })
+    fetch(`/api/communities/${roomId}/top-history`, { headers })
       .then((r) => (r.ok ? r.json() : null))
       .then((snaps) => {
         if (Array.isArray(snaps) && snaps.length > 0 && Array.isArray(snaps[0].top_tracks)) {
@@ -422,7 +436,13 @@ export function PlaylistPage() {
         }
       })
       .catch(() => {});
-  }, [currentRoomId]);
+  }, []);
+
+  useEffect(() => {
+    if (currentRoomId) {
+      fetchCommunityData(currentRoomId);
+    }
+  }, [currentRoomId, fetchCommunityData]);
 
   useEffect(() => {
     document.title = "Плейлист · ритм.";
@@ -449,65 +469,127 @@ export function PlaylistPage() {
     return () => clearInterval(id);
   }, []);
 
-  // Плеер: методы управления воспроизведением
+  // Плеер: методы управления воспроизведением с реальным звуком
   const playTrack = useCallback((trackId) => {
-    setPlayer((p) => p.trackId === trackId
-      ? { ...p, playing: !p.playing }
-      : { trackId, playing: true, progress: 0, elapsed: 0 });
-  }, []);
+    const track = tracks.find((t) => t.id === trackId);
+    if (!track) return;
 
-  const togglePlay = () => {
-    if (!player.trackId && tracks.length > 0) playTrack(sortedTracks(tracks)[0].id);
-    else setPlayer((p) => ({ ...p, playing: !p.playing }));
-  };
+    if (player.trackId === trackId && player.playing) {
+      audioService.pause();
+      setPlayer((p) => ({ ...p, playing: false }));
+    } else {
+      audioService.play({
+        ...track,
+        room_id: currentRoomId,
+        library_key: track.library_key || "dawn",
+      });
+      setPlayer({ trackId, playing: true, progress: 0, elapsed: 0 });
+    }
+  }, [tracks, player.trackId, player.playing, currentRoomId]);
 
   const playerNext = useCallback(() => {
     const s = sortedTracks(tracks);
     if (!s.length) return;
     const idx = s.findIndex((t) => t.id === player.trackId);
     const next = s[(idx + 1) % s.length];
+    audioService.play({
+      ...next,
+      room_id: currentRoomId,
+      library_key: next.library_key || "dawn",
+    });
     setPlayer({ trackId: next.id, playing: true, progress: 0, elapsed: 0 });
-  }, [tracks, player.trackId]);
+  }, [tracks, player.trackId, currentRoomId]);
 
   const playerPrev = useCallback(() => {
     const s = sortedTracks(tracks);
     if (!s.length) return;
     const idx = s.findIndex((t) => t.id === player.trackId);
     const prev = s[(idx - 1 + s.length) % s.length];
+    audioService.play({
+      ...prev,
+      room_id: currentRoomId,
+      library_key: prev.library_key || "dawn",
+    });
     setPlayer({ trackId: prev.id, playing: true, progress: 0, elapsed: 0 });
-  }, [tracks, player.trackId]);
+  }, [tracks, player.trackId, currentRoomId]);
+
+  const togglePlay = () => {
+    if (!player.trackId && tracks.length > 0) {
+      playTrack(sortedTracks(tracks)[0].id);
+    } else if (player.playing) {
+      audioService.pause();
+      setPlayer((p) => ({ ...p, playing: false }));
+    } else if (player.trackId) {
+      const track = tracks.find((t) => t.id === player.trackId);
+      if (track) {
+        audioService.play({
+          ...track,
+          room_id: currentRoomId,
+          library_key: track.library_key || "dawn",
+        });
+        setPlayer((p) => ({ ...p, playing: true }));
+      }
+    }
+  };
 
   const seekPlayer = (e) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const pct = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-    setPlayer((p) => ({ ...p, progress: pct, elapsed: (pct / 100) * 240 }));
+    const currentT = tracks.find((t) => t.id === player.trackId);
+    const dur = currentT?.duration_seconds || 45;
+    audioService.seek((pct / 100) * dur);
   };
 
   const currentTrack = tracks.find((t) => t.id === player.trackId) || null;
   const fmtTime = (sec) => `${Math.floor(sec / 60)}:${fmt2(Math.floor(sec % 60))}`;
 
-  // Симуляция воспроизведения прогресс-бара
+  // Подписка на аудио движок
   useEffect(() => {
-    const id = setInterval(() => {
-      setPlayer((p) => {
-        if (!p.playing) return p;
-        const next = Math.min(100, p.progress + 0.35);
-        return { ...p, progress: next, elapsed: (next / 100) * 240 };
-      });
-    }, 500);
-    return () => clearInterval(id);
-  }, []);
-
-  // Автопереход к следующему треку
-  useEffect(() => {
-    if (player.progress >= 100) playerNext();
-  }, [player.progress, playerNext]);
+    audioService.onEnded = () => {
+      playerNext();
+    };
+    const unsubscribe = audioService.subscribe((state) => {
+      if (state.track) {
+        setPlayer({
+          trackId: state.track.id,
+          playing: state.isPlaying,
+          progress: state.progress,
+          elapsed: state.seconds,
+        });
+      }
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, [playerNext]);
 
   const showToast = useCallback((msg) => {
     setToast(msg);
     clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 3000);
   }, []);
+
+  const handleToggleFavorite = async (trackId) => {
+    const t = tracks.find((x) => x.id === trackId);
+    if (!t) return;
+    const nextVal = !t.is_favorite;
+    setTracks((prev) => prev.map((x) => (x.id === trackId ? { ...x, is_favorite: nextVal } : x)));
+    showToast(nextVal ? `♥ «${t.title}» добавлен в Избранное` : `«${t.title}» удален из Избранного`);
+
+    if (currentRoomId) {
+      try {
+        const token = localStorage.getItem("token");
+        await fetch(`/api/communities/${currentRoomId}/tracks/${trackId}/favorite`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ value: nextVal }),
+        });
+      } catch {}
+    }
+  };
 
   const addHistory = useCallback((action, track) => {
     const map = {
@@ -585,6 +667,7 @@ export function PlaylistPage() {
           },
           body: JSON.stringify({ action: "remove" }),
         });
+        fetchCommunityData(currentRoomId);
       } catch {}
     }
   };
@@ -610,6 +693,7 @@ export function PlaylistPage() {
           },
           body: JSON.stringify({ action: "approve" }),
         });
+        fetchCommunityData(currentRoomId);
       } catch {}
     }
   };
@@ -632,6 +716,7 @@ export function PlaylistPage() {
           },
           body: JSON.stringify({ action: "reject" }),
         });
+        fetchCommunityData(currentRoomId);
       } catch {}
     }
   };
@@ -685,41 +770,45 @@ export function PlaylistPage() {
 
   // Добавление треков
   const addFromLibrary = async (libId) => {
-    const t = LIBRARY_TRACKS.find((x) => x.id === libId);
+    const t = LIBRARY_TRACKS.find((x) => x.id === libId || x.key === libId);
     if (!t) return;
-    const newId = nextId; setNextId((n) => n + 1);
-    const newTrack = { id: newId, ...t, proposer: user.username, votes: 0, userVote: 0, prevRank: tracks.length + 1 };
-    setModQueue((prev) => [...prev, newTrack]);
-    addHistory("propose", newTrack, 0);
-    showToast(`«${t.title}» отправлен на модерацию`);
-    setModalAdd(false);
+    const libraryKey = t.key || t.id;
 
     if (currentRoomId) {
       try {
         const token = localStorage.getItem("token");
-        const keyMap = { l1: "dawn", l2: "city", l3: "orbit", l4: "rain", l5: "night" };
-        const libraryKey = keyMap[libId] || "dawn";
-        await fetch(`/api/communities/${currentRoomId}/tracks/library`, {
+        const res = await fetch(`/api/communities/${currentRoomId}/tracks/library`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify({ library_key: libraryKey }),
+          body: JSON.stringify({ key: libraryKey, library_key: libraryKey }),
         });
+        if (res.ok) {
+          const resData = await res.json();
+          fetchCommunityData(currentRoomId);
+          showToast(resData.status === "approved" ? `✓ «${t.title}» добавлен в плейлист` : `«${t.title}» отправлен на модерацию`);
+          setModalAdd(false);
+          return;
+        } else {
+          const err = await res.json();
+          showToast(`⚠️ ${err.detail || "Не удалось добавить трек"}`);
+          return;
+        }
       } catch {}
     }
+
+    const newId = nextId; setNextId((n) => n + 1);
+    const newTrack = { id: newId, ...t, library_key: libraryKey, proposer: user.username, votes: 0, userVote: 0, prevRank: tracks.length + 1 };
+    setModQueue((prev) => [...prev, newTrack]);
+    addHistory("propose", newTrack, 0);
+    showToast(`«${t.title}» отправлен на модерацию`);
+    setModalAdd(false);
   };
 
   const uploadTrack = async () => {
     if (!uploadTitle.trim() || !uploadArtist.trim()) { showToast("⚠️ Заполните название и исполнителя"); return; }
-    const grads = ["from-violet-600 to-purple-800","from-pink-500 to-rose-700","from-sky-400 to-cyan-600","from-emerald-400 to-teal-600","from-amber-400 to-orange-600"];
-    const newId = nextId; setNextId((n) => n + 1);
-    const newTrack = { id: newId, title: uploadTitle.trim(), artist: uploadArtist.trim(), duration: "—", proposer: uploadProposer.trim() || "@вы", votes: 0, userVote: 0, prevRank: tracks.length + 1, gradient: grads[newId % grads.length] };
-    setModQueue((prev) => [...prev, newTrack]);
-    addHistory("propose", newTrack, 0);
-    showToast(`«${uploadTitle.trim()}» отправлен на модерацию`);
-
     if (currentRoomId && chosenFile) {
       try {
         const token = localStorage.getItem("token");
@@ -727,14 +816,28 @@ export function PlaylistPage() {
         formData.append("file", chosenFile);
         formData.append("title", uploadTitle.trim());
         formData.append("artist", uploadArtist.trim());
-        await fetch(`/api/communities/${currentRoomId}/tracks/upload`, {
+        const res = await fetch(`/api/communities/${currentRoomId}/tracks/upload`, {
           method: "POST",
           headers: token ? { Authorization: `Bearer ${token}` } : {},
           body: formData,
         });
+        if (res.ok) {
+          const resData = await res.json();
+          fetchCommunityData(currentRoomId);
+          showToast(resData.status === "approved" ? `✓ «${uploadTitle.trim()}» добавлен в плейлист` : `«${uploadTitle.trim()}» отправлен на модерацию`);
+          setUploadTitle(""); setUploadArtist(""); setChosenFile(null);
+          setModalAdd(false);
+          return;
+        }
       } catch {}
     }
 
+    const grads = ["from-violet-600 to-purple-800","from-pink-500 to-rose-700","from-sky-400 to-cyan-600","from-emerald-400 to-teal-600","from-amber-400 to-orange-600"];
+    const newId = nextId; setNextId((n) => n + 1);
+    const newTrack = { id: newId, title: uploadTitle.trim(), artist: uploadArtist.trim(), duration: "—", proposer: uploadProposer.trim() || "@вы", votes: 0, userVote: 0, prevRank: tracks.length + 1, gradient: grads[newId % grads.length] };
+    setModQueue((prev) => [...prev, newTrack]);
+    addHistory("propose", newTrack, 0);
+    showToast(`«${uploadTitle.trim()}» отправлен на модерацию`);
     setUploadTitle(""); setUploadArtist(""); setChosenFile(null);
     setModalAdd(false);
   };
@@ -920,6 +1023,7 @@ export function PlaylistPage() {
               canModerate={canModerate}
               onPlay={playTrack}
               onVote={handleVote}
+              onFavorite={handleToggleFavorite}
               onDelete={deleteTrack}
             />
           ))}

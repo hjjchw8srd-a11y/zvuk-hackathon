@@ -633,7 +633,8 @@ def add_library_track(
 ):
     room = _room(db, room_id)
     membership = _member(db, room_id, user.id)
-    item = next((entry for entry in LIBRARY if entry["key"] == payload.get("key")), None)
+    track_key = payload.get("key") or payload.get("library_key")
+    item = next((entry for entry in LIBRARY if entry["key"] == track_key), None)
     if item is None:
         raise HTTPException(status_code=404, detail="Трек отсутствует в библиотеке")
     duplicate = db.scalar(select(Track.id).where(Track.room_id == room_id, Track.library_key == item["key"]))

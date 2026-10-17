@@ -28,7 +28,7 @@ import {
   LogOut,
   User as UserIcon,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { Popup } from "./Popup";
 import { useAuth } from "@/lib/auth";
@@ -41,6 +41,7 @@ const items = [
 ];
 
 export function AppSidebar() {
+  const navigate = useNavigate();
   const { open } = useSidebar();
   const { user, isAuthenticated, logout } = useAuth();
   const [communities, setCommunities] = useState([
@@ -111,6 +112,7 @@ export function AppSidebar() {
             url: `/community/${data.id}`,
           },
         ]);
+        navigate(`/community/${data.id}`);
         return;
       }
     } catch {}
@@ -124,6 +126,7 @@ export function AppSidebar() {
         url: `/community/${newId}`,
       },
     ]);
+    navigate(`/community/${newId}`);
   };
 
   const handleRemoveCommunity = (idToRemove) => {
@@ -152,6 +155,7 @@ export function AppSidebar() {
             url: `/community/${data.id}`,
           },
         ]);
+        navigate(`/community/${data.id}`);
         return;
       }
     } catch {}
@@ -165,6 +169,7 @@ export function AppSidebar() {
         url: `/community/${newId}`,
       },
     ]);
+    navigate(`/community/${newId}`);
   };
 
   return (

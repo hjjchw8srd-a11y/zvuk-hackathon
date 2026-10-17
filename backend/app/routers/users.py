@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import get_current_user
 from app.database import get_db
-from app.models import MemberRole, Room, RoomMember, Track, User
+from app.models import Favorite, MemberRole, Room, RoomMember, Track, User
 from app.schemas import ProfileUpdate, UserOut
 
 router = APIRouter(tags=["users"])
@@ -124,6 +124,40 @@ def get_my_tracks(
             for track, room_name in tracks_with_rooms
         ],
         "count": len(tracks_with_rooms),
+    }
+
+
+@router.get("/api/me/favorites")
+def get_my_favorites(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Получить список избранных треков пользователя."""
+    favorites_with_tracks = db.execute(
+        select(Track, Room.name.label("room_name"))
+        .join(Favorite, Favorite.track_id == Track.id)
+        .join(Room, Room.id == Track.room_id)
+        .where(Favorite.user_id == user.id)
+        .order_by(Favorite.created_at.desc())
+    ).all()
+
+    return {
+        "favorites": [
+            {
+                "id": track.id,
+                "title": track.title,
+                "artist": track.artist,
+                "genre": track.genre,
+                "duration_seconds": track.duration_seconds,
+                "source_type": track.source_type.value,
+                "library_key": track.library_key,
+                "room_id": track.room_id,
+                "room_name": room_name,
+                "created_at": track.created_at,
+            }
+            for track, room_name in favorites_with_tracks
+        ],
+        "count": len(favorites_with_tracks),
     }
 
 

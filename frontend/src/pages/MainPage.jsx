@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Sparkles,
   Users,
@@ -12,6 +12,7 @@ import {
   Sliders,
   CheckCircle2,
   Play,
+  Pause,
   Heart,
   Plus,
   KeyRound,
@@ -19,15 +20,46 @@ import {
   Zap,
 } from "lucide-react";
 import { Popup } from "@/components/Popup";
+import { cn } from "@/lib/utils";
+import { audioService } from "@/lib/audioService";
 
 export function MainPage() {
+  const navigate = useNavigate();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isJoinOpen, setIsJoinOpen] = useState(false);
   const [upvoted, setUpvoted] = useState(false);
   const [votesCount, setVotesCount] = useState(14);
+  const [activeCommunity, setActiveCommunity] = useState(null);
+  const [isPlayingPreview, setIsPlayingPreview] = useState(false);
 
   useEffect(() => {
     document.title = "ритм. — Совместные плейлисты в реальном времени";
+
+    const token = localStorage.getItem("token");
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
+    fetch("/api/me/communities", { headers })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        const first = data?.created?.[0] || data?.joined?.[0];
+        if (first) {
+          setActiveCommunity(first);
+        } else {
+          fetch("/api/bootstrap", { headers })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((bData) => {
+              if (bData?.communities?.length > 0) {
+                setActiveCommunity(bData.communities[0]);
+              }
+            });
+        }
+      })
+      .catch(() => {});
+
+    const unsubscribe = audioService.subscribe((state) => {
+      setIsPlayingPreview(state.isPlaying && state.track?.id === "preview-1");
+    });
+    return () => unsubscribe();
   }, []);
 
   const handleVote = () => {
@@ -38,6 +70,62 @@ export function MainPage() {
       setVotesCount((prev) => prev - 1);
       setUpvoted(false);
     }
+  };
+
+  const handleTogglePreviewPlay = () => {
+    if (isPlayingPreview) {
+      audioService.pause();
+    } else {
+      audioService.play({
+        id: "preview-1",
+        title: "Midnight City",
+        artist: "M83",
+        library_key: "city",
+        duration_seconds: 60,
+      });
+    }
+  };
+
+  const handleCreateCommunity = async (name) => {
+    try {
+      const token = localStorage.getItem("token");
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      const res = await fetch("/api/communities", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        navigate(`/community/${data.id}`);
+        return;
+      }
+    } catch {}
+    navigate("/playlist");
+  };
+
+  const handleJoinByCode = async (code) => {
+    try {
+      const token = localStorage.getItem("token");
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      const res = await fetch("/api/join", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ code: code.trim().toUpperCase() }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        navigate(`/community/${data.id}`);
+        return;
+      }
+    } catch {}
+    navigate("/playlist");
   };
 
   return (
@@ -116,23 +204,35 @@ export function MainPage() {
                     <span className="relative inline-flex rounded-full h-3 w-3 bg-[#a3e635]" />
                   </span>
                   <span className="text-xs font-bold uppercase tracking-wider text-[#a3e635]">
-                    Сейчас в эфире • Комната «Пятничный Вайб»
+                    Сейчас в эфире • {activeCommunity ? `Комната «${activeCommunity.name}»` : "Демо-комната «Пятничный Вайб»"}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-neutral-400 bg-neutral-900/80 px-2.5 py-1 rounded-full border border-neutral-800">
                   <Users className="h-3.5 w-3.5 text-[#a3e635]" />
-                  <span>8 участников</span>
+                  <span>{activeCommunity?.member_count || 8} участников</span>
                 </div>
               </div>
 
-              {/* Текущий трек */}
+              {/* Текущий трек с живым воспроизведением */}
               <div className="flex items-center gap-4 bg-neutral-900/60 p-3.5 rounded-xl border border-neutral-800/80 mb-4">
-                <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-[#293d2c] text-[#a3e635] overflow-hidden">
+                <button
+                  type="button"
+                  onClick={handleTogglePreviewPlay}
+                  className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-[#293d2c] text-[#a3e635] overflow-hidden cursor-pointer group"
+                  title={isPlayingPreview ? "Поставить на паузу" : "Послушать отрывок"}
+                >
                   <Headphones className="h-7 w-7" />
-                  <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
-                    <Play className="h-6 w-6 text-white fill-white" />
+                  <div className={cn(
+                    "absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity",
+                    isPlayingPreview ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                  )}>
+                    {isPlayingPreview ? (
+                      <Pause className="h-6 w-6 text-[#a3e635] fill-[#a3e635]" />
+                    ) : (
+                      <Play className="h-6 w-6 text-white fill-white" />
+                    )}
                   </div>
-                </div>
+                </button>
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-bold text-white truncate">
                     Midnight City
@@ -141,7 +241,7 @@ export function MainPage() {
                     M83 • Добавил Alexey
                   </div>
                   <div className="w-full bg-neutral-800 h-1.5 rounded-full mt-2.5 overflow-hidden">
-                    <div className="bg-[#a3e635] h-full w-2/3 rounded-full" />
+                    <div className="bg-[#a3e635] h-full w-2/3 rounded-full animate-pulse" />
                   </div>
                 </div>
                 <button
@@ -176,6 +276,21 @@ export function MainPage() {
                     <Flame className="h-3 w-3" /> 7 голосов
                   </span>
                 </div>
+              </div>
+
+              {/* Кнопка быстрого перехода в комнату */}
+              <div className="mt-4 pt-3 border-t border-neutral-800/80 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <span className="text-xs text-neutral-400">
+                  Это живой плеер сообщества. Хотите управлять треками вместе?
+                </span>
+                <button
+                  type="button"
+                  onClick={() => navigate(activeCommunity ? `/community/${activeCommunity.id}` : "/playlist")}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2 rounded-xl bg-[#233525] border border-[#2e4730] text-[#a3e635] text-xs font-bold hover:bg-[#2b412e] transition-all cursor-pointer shrink-0"
+                >
+                  <span>Перейти в плейлист</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </button>
               </div>
             </div>
           </div>
@@ -454,11 +569,13 @@ export function MainPage() {
         type="create"
         open={isCreateOpen}
         onOpenChange={setIsCreateOpen}
+        onCreateCommunity={handleCreateCommunity}
       />
       <Popup
         type="join"
         open={isJoinOpen}
         onOpenChange={setIsJoinOpen}
+        onJoinByCode={handleJoinByCode}
       />
     </div>
   );
