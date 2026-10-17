@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "../lib/auth";
 import { useNavigate } from "react-router-dom";
 import {
@@ -33,17 +33,9 @@ export default function SuperAdminPage() {
   const [previewTrackId, setPreviewTrackId] = useState(null);
   const [audioElement, setAudioElement] = useState(null);
 
-  useEffect(() => {
-    if (!user?.is_superuser) {
-      navigate("/", { replace: true });
-      return;
-    }
-    fetchData();
-  }, [user, navigate]);
-
   const token = localStorage.getItem("token");
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const [ovRes, trRes, rmRes] = await Promise.all([
@@ -60,7 +52,15 @@ export default function SuperAdminPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
+
+  useEffect(() => {
+    if (!user?.is_superuser) {
+      navigate("/", { replace: true });
+      return;
+    }
+    fetchData();
+  }, [user, navigate, fetchData]);
 
   const handleClearReports = async (trackId) => {
     setActionLoadingId(trackId);

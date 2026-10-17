@@ -29,11 +29,13 @@ import {
   Share2,
   Flag,
   SlidersHorizontal,
+  Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { audioService } from "@/lib/audioService";
 import { QRCode } from "@/components/QRCode.jsx";
 import { EqualizerModal } from "@/components/EqualizerModal.jsx";
+import { StreamerBotModal } from "@/components/StreamerBotModal.jsx";
 
 const STUDIO_TRACKS = [
   {
@@ -173,8 +175,8 @@ export function PartyPage() {
 
   // Local timers & UI
   const [elapsedTimer, setElapsedTimer] = useState(0);
-  const [isCopied, setIsCopied] = useState(false);
   const [isLinkCopied, setIsLinkCopied] = useState(false);
+  const [isStreamerBotOpen, setIsStreamerBotOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
 
@@ -876,6 +878,16 @@ export function PartyPage() {
               )}
             </button>
 
+            {/* Кнопка Twitch / Streamer.bot */}
+            <button
+              onClick={() => setIsStreamerBotOpen(true)}
+              className="h-12 px-4 rounded-2xl bg-purple-950/40 hover:bg-purple-900/60 border border-purple-700/50 text-purple-300 font-semibold text-xs transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+              title="Интеграция с Twitch чатом"
+            >
+              <Bot size={16} />
+              <span className="hidden sm:inline">Twitch Чат</span>
+            </button>
+
             {/* Завершить тусовку (Хост) или Выйти */}
             {isHost ? (
               <button
@@ -1486,6 +1498,12 @@ export function PartyPage() {
       </Dialog>
 
       <EqualizerModal open={isEqualizerOpen} onOpenChange={setIsEqualizerOpen} />
+
+      <StreamerBotModal
+        open={isStreamerBotOpen}
+        onOpenChange={setIsStreamerBotOpen}
+        currentRoomCode={partyState?.party?.invite_code || "ZVUK26"}
+      />
     </div>
   );
 }

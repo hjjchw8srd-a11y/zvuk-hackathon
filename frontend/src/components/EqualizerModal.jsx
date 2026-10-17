@@ -74,7 +74,6 @@ function VerticalBandSlider({
 
   // Zero dB is at 50%
   const isPositive = value > 0;
-  const isNegative = value < 0;
   const fillBottom = isPositive ? 50 : percentage;
   const fillHeight = isPositive ? percentage - 50 : 50 - percentage;
 

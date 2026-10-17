@@ -15,6 +15,9 @@ from sqlalchemy.pool import StaticPool
 from app.database import Base, get_db
 from app.main import app
 from app.config import settings
+from app.auth import get_current_user
+from app.models import User
+import uuid
 
 
 class CommunityApiTests(unittest.TestCase):
@@ -42,7 +45,26 @@ class CommunityApiTests(unittest.TestCase):
                 finally:
                     session.close()
 
+        self.test_user_id = uuid.uuid4()
+        with Session(self.engine) as session:
+            test_user = User(
+                id=self.test_user_id,
+                email="tester@test.com",
+                display_name="Tester",
+                username="tester",
+                is_superuser=True,
+            )
+            session.add(test_user)
+            session.commit()
+
         app.dependency_overrides[get_db] = override_db
+        app.dependency_overrides[get_current_user] = lambda: User(
+            id=self.test_user_id,
+            email="tester@test.com",
+            display_name="Tester",
+            username="tester",
+            is_superuser=True,
+        )
         self.client = TestClient(app)
 
     def tearDown(self) -> None:

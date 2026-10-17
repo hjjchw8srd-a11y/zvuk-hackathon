@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { Music2, Lock, User, Mail, Sparkles, ArrowRight, ShieldCheck } from "lucide-react";
 
@@ -17,9 +17,8 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const { user, isAuthenticated, login, register } = useAuth();
+  const { isAuthenticated, login, register } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
 
   useEffect(() => {
     if (isAuthenticated) {

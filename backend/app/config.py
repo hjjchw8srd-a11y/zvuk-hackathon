@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     uploads_dir: Path = BACKEND_DIR / "uploads"
     app_base_url: str = ""
     frontend_port: int = 5173
+    streamerbot_enabled: bool = False
+    streamerbot_ws_url: str = "ws://127.0.0.1:8080/"
+    streamerbot_password: str = ""
+    streamerbot_room_id: str = ""
+    streamerbot_room_code: str = ""
+    streamerbot_command_prefix: str = "!"
 
 
 settings = Settings()

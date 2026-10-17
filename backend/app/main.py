@@ -20,7 +20,7 @@ from sqlalchemy import text
 from app.config import BACKEND_DIR, settings
 from app.database import Base, SessionLocal, engine
 from app import models as _models  # noqa: F401 — регистрирует модели в metadata
-from app.routers import auth, communities, parties, superadmin, users
+from app.routers import auth, communities, integrations, parties, superadmin, users
 from app.routers.communities import manager, ws_community
 from app.routers.parties import party_manager, ws_party_endpoint
 
@@ -97,6 +97,17 @@ async def startup_event():
     except Exception as e:
         print("SuperAdmin seed check:", e)
 
+    from app.integrations.streamerbot import streamerbot_bridge
+
+    streamerbot_bridge.start()
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    from app.integrations.streamerbot import streamerbot_bridge
+
+    await streamerbot_bridge.stop()
+
 
 @app.websocket("/ws/communities/{room_id}")
 async def root_ws_community(websocket: WebSocket, room_id: uuid.UUID):
@@ -129,6 +140,7 @@ app.include_router(users.router)
 app.include_router(communities.router)
 app.include_router(parties.router)
 app.include_router(superadmin.router)
+app.include_router(integrations.router)
 
 
 # ── Сервинг загружённых аудиофайлов ─────────────────────────────────────────

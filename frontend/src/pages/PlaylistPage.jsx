@@ -12,12 +12,13 @@ import {
   Copy, Check, Users, History, ShieldCheck, Trash2,
   CheckCircle, XCircle, Upload, ChevronUp, ChevronDown,
   Minus, Crown, UserPlus, Image as ImageIcon, Heart, Radio, Flag,
-  SlidersHorizontal,
+  SlidersHorizontal, Bot,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { audioService } from "@/lib/audioService";
 import { QRCode } from "@/components/QRCode.jsx";
 import { EqualizerModal } from "@/components/EqualizerModal.jsx";
+import { StreamerBotModal } from "@/components/StreamerBotModal.jsx";
 
 // ─── Заготовки под будущий бэкенд (когда появится авторизация и API) ────────
 const DEFAULT_USER = {
@@ -309,6 +310,7 @@ export function PlaylistPage() {
   const [copyrightAgreed, setCopyrightAgreed] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [isEqualizerOpen, setIsEqualizerOpen] = useState(false);
+  const [isStreamerBotOpen, setIsStreamerBotOpen] = useState(false);
 
   // Ссылка приглашения
   const [copiedLink, setCopiedLink] = useState(false);
@@ -1520,6 +1522,14 @@ export function PlaylistPage() {
             >
               <SlidersHorizontal size={16} />
             </button>
+            <button
+              type="button"
+              onClick={() => setIsStreamerBotOpen(true)}
+              title="Интеграция с Twitch / Streamer.bot"
+              className="w-8 h-8 flex items-center justify-center text-purple-400 hover:text-purple-300 hover:bg-purple-950/40 transition-colors rounded-lg cursor-pointer ml-1"
+            >
+              <Bot size={16} />
+            </button>
           </div>
 
           <span className="text-xs text-neutral-500 tabular-nums shrink-0">{fmtTime(player.elapsed)} / {fmtTime(currentTrack?.duration_seconds || 45)}</span>
@@ -1802,6 +1812,13 @@ export function PlaylistPage() {
 
       {/* ═══ МОДАЛЬНОЕ ОКНО ЭКВАЛАЙЗЕРА (WEB AUDIO API) ═══════════════════════ */}
       <EqualizerModal open={isEqualizerOpen} onOpenChange={setIsEqualizerOpen} />
+
+      {/* ═══ МОДАЛЬНОЕ ОКНО TWITCH / STREAMER.BOT ══════════════════════════════ */}
+      <StreamerBotModal
+        open={isStreamerBotOpen}
+        onOpenChange={setIsStreamerBotOpen}
+        currentRoomCode={playlist?.code || "ZVUK26"}
+      />
     </div>
   );
 }
