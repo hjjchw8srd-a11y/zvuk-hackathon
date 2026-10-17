@@ -2,16 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 import secrets
 import uuid
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 import math
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from mutagen import File as MutagenFile
 from mutagen import MutagenError
@@ -52,6 +53,90 @@ from app.services import (
     get_ranked_queue,
 )
 router = APIRouter(prefix="/api", tags=["communities"])
+
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: dict[str, set[WebSocket]] = defaultdict(set)
+        self.main_loop: asyncio.AbstractEventLoop | None = None
+
+    def set_loop(self, loop: asyncio.AbstractEventLoop):
+        self.main_loop = loop
+
+    async def connect(self, websocket: WebSocket, room_id: str):
+        if self.main_loop is None:
+            try:
+                self.main_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                pass
+        await websocket.accept()
+        self.active_connections[room_id].add(websocket)
+
+    def disconnect(self, websocket: WebSocket, room_id: str):
+        if room_id in self.active_connections:
+            self.active_connections[room_id].discard(websocket)
+            if not self.active_connections[room_id]:
+                del self.active_connections[room_id]
+
+    async def broadcast_room(self, room_id: str, message: dict):
+        room_key = str(room_id)
+        if room_key not in self.active_connections:
+            return
+        dead = []
+        for ws in list(self.active_connections[room_key]):
+            try:
+                await ws.send_json(message)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.disconnect(ws, room_key)
+
+    def notify_room(self, room_id: str | uuid.UUID, action: str = "update", extra: dict | None = None):
+        message = {"type": "room_updated", "room_id": str(room_id), "action": action}
+        if extra:
+            message.update(extra)
+
+        room_key = str(room_id)
+        if room_key not in self.active_connections or not self.active_connections[room_key]:
+            return
+
+        if self.main_loop is None:
+            try:
+                self.main_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                pass
+
+        if self.main_loop and self.main_loop.is_running():
+            try:
+                current_loop = None
+                try:
+                    current_loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    pass
+
+                if current_loop is self.main_loop:
+                    self.main_loop.create_task(self.broadcast_room(room_key, message))
+                else:
+                    asyncio.run_coroutine_threadsafe(self.broadcast_room(room_key, message), self.main_loop)
+            except Exception:
+                pass
+
+
+manager = ConnectionManager()
+
+
+@router.websocket("/ws/communities/{room_id}")
+async def ws_community(websocket: WebSocket, room_id: uuid.UUID):
+    room_str = str(room_id)
+    await manager.connect(websocket, room_str)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+    except (WebSocketDisconnect, Exception):
+        manager.disconnect(websocket, room_str)
+
 MAX_AUDIO_SIZE = 15 * 1024 * 1024
 MAX_AUDIO_DURATION_SECONDS = 20 * 60
 INVITE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
@@ -325,6 +410,7 @@ def update_community(
 
     db.commit()
     db.refresh(room)
+    manager.notify_room(room.id, action="community_updated")
     return {
         "id": room.id,
         "name": room.name,
@@ -353,6 +439,7 @@ def delete_community(
         room.is_active = False
 
     db.commit()
+    manager.notify_room(room_id, action="community_deleted")
     return {"ok": True}
 
 
@@ -369,6 +456,7 @@ def join_community(
     if db.get(RoomMember, (room.id, user.id)) is None:
         db.add(RoomMember(room_id=room.id, user_id=user.id))
         db.commit()
+        manager.notify_room(room.id, action="member_joined")
     return {
         "id": room.id,
         "name": room.name,
@@ -559,6 +647,7 @@ def rotate_playlist(
         playlist_round = create_playlist_round(db, room_id, user.id, manual=True)
         db.add(ModerationLog(room_id=room_id, actor_user_id=user.id, action="rotation", details="Начата новая ротация"))
         db.commit()
+        manager.notify_room(room_id, action="rotation")
         return {"ok": True, "vote_round": playlist_round.key}
     except (ConflictError, ForbiddenError, NotFoundError) as error:
         db.rollback()
@@ -686,6 +775,7 @@ def add_library_track(
     if status == ModerationStatus.APPROVED:
         _add_to_active_queue(db, room, track, user.id)
     db.commit()
+    manager.notify_room(room_id, action="track_added", extra={"track_id": str(track.id), "status": status.value})
     return {"id": track.id, "status": status.value}
 
 
@@ -805,6 +895,7 @@ async def upload_track(
         if status == ModerationStatus.APPROVED:
             _add_to_active_queue(db, room, track, user.id)
         db.commit()
+        manager.notify_room(room_id, action="track_uploaded", extra={"track_id": str(track.id), "status": status.value})
     except Exception:
         db.rollback()
         destination.unlink(missing_ok=True)
@@ -851,6 +942,7 @@ def vote_track(
         else:
             result = cast_vote(db, item.id, user.id, payload.value)
         db.commit()
+        manager.notify_room(room_id, action="vote", extra={"track_id": str(track_id), "value": result})
         return {"value": result}
     except (ConflictError, ForbiddenError, NotFoundError, ValueError) as error:
         db.rollback()
@@ -914,6 +1006,7 @@ def moderate_track(
     room.queue_version += 1
     db.add(ModerationLog(room_id=room_id, track_id=track_id, actor_user_id=user.id, action=action, details=track.title))
     db.commit()
+    manager.notify_room(room_id, action="moderation", extra={"track_id": str(track_id), "action": action, "status": track.moderation_status.value})
     return {"status": track.moderation_status.value, "queue_state": item.state.value if item else "removed"}
 
 
@@ -942,6 +1035,7 @@ def play_track(
         db.add(PlaybackHistory(queue_item_id=item.id, played_by_user_id=user.id, queue_version=item.version, started_at=item.started_at))
         room.queue_version += 1
     db.commit()
+    manager.notify_room(room_id, action="playback", extra={"track_id": str(track_id)})
     return {"ok": True, "queue_version": item.version}
 
 
@@ -960,6 +1054,7 @@ def complete_track(
     try:
         previous, next_item = complete_current_and_play_next(db, room_id, user.id, expected_queue_item_id=item.id, expected_version=payload.queue_version)
         db.commit()
+        manager.notify_room(room_id, action="playback")
         return {"completed": previous is not None, "next_track": {"id": next_item.track_id} if next_item else None}
     except (ConflictError, ForbiddenError, NotFoundError) as error:
         db.rollback()
@@ -982,4 +1077,5 @@ def update_member_role(
         raise HTTPException(status_code=400, detail="Роль владельца изменить нельзя")
     target.role = payload.role
     db.commit()
+    manager.notify_room(room_id, action="role_updated", extra={"member_id": str(member_id), "role": target.role.value})
     return {"role": target.role.value}

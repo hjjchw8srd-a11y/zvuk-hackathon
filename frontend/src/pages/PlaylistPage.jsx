@@ -382,6 +382,12 @@ export function PlaylistPage() {
             "from-yellow-400 to-pink-500",
           ];
 
+          const getGradient = (id, fallbackIdx = 0) => {
+            if (!id) return grads[fallbackIdx % grads.length];
+            const hash = String(id).split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
+            return grads[Math.abs(hash) % grads.length];
+          };
+
           const active = data.tracks
             .filter((t) => t.status === "approved" || !t.status)
             .map((t, idx) => ({
@@ -399,7 +405,7 @@ export function PlaylistPage() {
               proposer: t.contributor ? `@${t.contributor}` : (t.created_by_name ? `@${t.created_by_name}` : "@volna"),
               votes: t.vote_score ?? t.score ?? 0,
               userVote: t.my_vote ?? t.user_vote ?? 0,
-              gradient: grads[idx % grads.length],
+              gradient: getGradient(t.id, idx),
               prevRank: idx + 1,
             }));
           setTracks(active);
@@ -418,7 +424,7 @@ export function PlaylistPage() {
                 : "0:45",
               duration_seconds: t.duration_seconds || 45,
               proposer: t.contributor ? `@${t.contributor}` : (t.created_by_name ? `@${t.created_by_name}` : "@участник"),
-              gradient: grads[(idx + 2) % grads.length],
+              gradient: getGradient(t.id, idx + 2),
             }));
           setModQueue((prev) => {
             const serverIds = new Set(pending.map((p) => p.id));
@@ -448,9 +454,63 @@ export function PlaylistPage() {
   }, []);
 
   useEffect(() => {
-    if (currentRoomId) {
-      fetchCommunityData(currentRoomId);
+    if (!currentRoomId) return;
+
+    fetchCommunityData(currentRoomId);
+
+    // Подключение к WebSocket для мгновенных обновлений в реальном времени
+    let ws = null;
+    let reconnectTimeout = null;
+    let isMounted = true;
+
+    function connectWs() {
+      if (!isMounted) return;
+      try {
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const wsUrl = `${protocol}//${window.location.host}/api/ws/communities/${currentRoomId}`;
+        ws = new WebSocket(wsUrl);
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data?.type === "room_updated") {
+              fetchCommunityData(currentRoomId);
+            }
+          } catch {}
+        };
+
+        ws.onclose = () => {
+          if (isMounted) {
+            reconnectTimeout = setTimeout(connectWs, 2000);
+          }
+        };
+
+        ws.onerror = () => {
+          if (ws) ws.close();
+        };
+      } catch {
+        if (isMounted) {
+          reconnectTimeout = setTimeout(connectWs, 2000);
+        }
+      }
     }
+
+    connectWs();
+
+    // Регулярный опрос для надежной доставки обновлений
+    const pollInterval = setInterval(() => {
+      fetchCommunityData(currentRoomId);
+    }, 2500);
+
+    return () => {
+      isMounted = false;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (pollInterval) clearInterval(pollInterval);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
+    };
   }, [currentRoomId, fetchCommunityData]);
 
   useEffect(() => {
@@ -681,10 +741,11 @@ export function PlaylistPage() {
             },
             body: JSON.stringify({ value: nextVote }),
           });
+          fetchCommunityData(currentRoomId);
         } catch {}
       }
     },
-    [addHistory, tracks, currentRoomId]
+    [addHistory, tracks, currentRoomId, fetchCommunityData]
   );
 
   // Модерация

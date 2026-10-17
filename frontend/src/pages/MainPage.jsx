@@ -100,6 +100,57 @@ export function MainPage() {
     };
   }, [loadInitialCommunity]);
 
+  useEffect(() => {
+    if (!activeCommunity?.id) return;
+
+    let ws = null;
+    let reconnectTimeout = null;
+    let isMounted = true;
+
+    function connectWs() {
+      if (!isMounted) return;
+      try {
+        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+        const wsUrl = `${protocol}//${window.location.host}/api/ws/communities/${activeCommunity.id}`;
+        ws = new WebSocket(wsUrl);
+
+        ws.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data?.type === "room_updated") {
+              fetchActiveCommunityTracks(activeCommunity.id);
+            }
+          } catch {}
+        };
+
+        ws.onclose = () => {
+          if (isMounted) reconnectTimeout = setTimeout(connectWs, 2000);
+        };
+        ws.onerror = () => {
+          if (ws) ws.close();
+        };
+      } catch {
+        if (isMounted) reconnectTimeout = setTimeout(connectWs, 2000);
+      }
+    }
+
+    connectWs();
+
+    const pollId = setInterval(() => {
+      fetchActiveCommunityTracks(activeCommunity.id);
+    }, 3000);
+
+    return () => {
+      isMounted = false;
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+      if (pollId) clearInterval(pollId);
+      if (ws) {
+        ws.onclose = null;
+        ws.close();
+      }
+    };
+  }, [activeCommunity?.id, fetchActiveCommunityTracks]);
+
   const currentTrack = communityTracks[0] || null;
 
   useEffect(() => {
@@ -125,6 +176,7 @@ export function MainPage() {
         },
         body: JSON.stringify({ value: nextVote }),
       });
+      fetchActiveCommunityTracks(activeCommunity.id);
     } catch {}
   };
 

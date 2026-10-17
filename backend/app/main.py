@@ -7,9 +7,11 @@
 - Сервинг загруженных файлов через /uploads/{filename}
 """
 
+import asyncio
+import uuid
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -19,11 +21,25 @@ from app.config import BACKEND_DIR, settings
 from app.database import engine
 from app import models as _models  # noqa: F401 — регистрирует модели в metadata
 from app.routers import auth, communities, users
+from app.routers.communities import manager, ws_community
 
 _ = _models
 
 
 app = FastAPI(title="ритм. backend", version="1.0.0")
+
+
+@app.on_event("startup")
+async def startup_event():
+    try:
+        manager.set_loop(asyncio.get_running_loop())
+    except Exception:
+        pass
+
+
+@app.websocket("/ws/communities/{room_id}")
+async def root_ws_community(websocket: WebSocket, room_id: uuid.UUID):
+    await ws_community(websocket, room_id)
 
 # ── CORS ────────────────────────────────────────────────────────────────────
 # allow_origins=["*"] + allow_credentials не работают вместе в браузере.
