@@ -1649,7 +1649,9 @@ export function PlaylistPage() {
                       <p className="text-sm font-semibold text-white truncate">{t.title}</p>
                       <p className="text-xs text-neutral-400">{t.artist}</p>
                     </div>
-                    <span className="text-sm font-bold shrink-0" style={{ color: colors[i] }}>+{t.votes}</span>
+                    <span className="text-sm font-bold shrink-0" style={{ color: colors[i] }}>
+                      {t.votes > 0 ? `+${t.votes}` : t.votes}
+                    </span>
                   </div>
                 );
               })}

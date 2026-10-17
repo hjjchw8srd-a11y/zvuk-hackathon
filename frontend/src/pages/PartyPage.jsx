@@ -969,8 +969,17 @@ export function PartyPage() {
                 <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-orange-400 bg-orange-950/40 border border-orange-800/40 px-2.5 py-0.5 rounded-full">
                   <Flame size={11} /> Главный бэнгер
                 </span>
-                <span className="text-xs font-black text-[#a3e635]">
-                  +{banger?.score ?? 0} баллов
+                <span
+                  className={cn(
+                    "text-xs font-black",
+                    (banger?.score ?? 0) > 0
+                      ? "text-[#a3e635]"
+                      : (banger?.score ?? 0) < 0
+                      ? "text-red-400"
+                      : "text-neutral-400"
+                  )}
+                >
+                  {(banger?.score ?? 0) > 0 ? `+${banger.score}` : (banger?.score ?? 0)} баллов
                 </span>
               </div>
 
@@ -1002,8 +1011,17 @@ export function PartyPage() {
                 <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-400 bg-amber-950/40 border border-amber-800/40 px-2.5 py-0.5 rounded-full">
                   <Crown size={11} /> Главный хитмейкер
                 </span>
-                <span className="text-xs font-black text-[#a3e635]">
-                  +{hitmaker?.total_score ?? 0} баллов
+                <span
+                  className={cn(
+                    "text-xs font-black",
+                    (hitmaker?.total_score ?? 0) > 0
+                      ? "text-[#a3e635]"
+                      : (hitmaker?.total_score ?? 0) < 0
+                      ? "text-red-400"
+                      : "text-neutral-400"
+                  )}
+                >
+                  {(hitmaker?.total_score ?? 0) > 0 ? `+${hitmaker.total_score}` : (hitmaker?.total_score ?? 0)} баллов
                 </span>
               </div>
 
@@ -1148,8 +1166,17 @@ export function PartyPage() {
                     </div>
 
                     {/* Баллы */}
-                    <span className="text-sm font-extrabold text-[#a3e635] px-2 py-0.5 rounded-lg bg-[#1a231b] border border-[#2c3d2b] tabular-nums shrink-0">
-                      +{track.score ?? 0}
+                    <span
+                      className={cn(
+                        "text-sm font-extrabold px-2 py-0.5 rounded-lg border tabular-nums shrink-0",
+                        (track.score || 0) > 0
+                          ? "text-[#a3e635] bg-[#1a231b] border-[#2c3d2b]"
+                          : (track.score || 0) < 0
+                          ? "text-red-400 bg-red-950/40 border-red-800/40"
+                          : "text-neutral-400 bg-[#1c1c1c] border-[#2c2c2c]"
+                      )}
+                    >
+                      {(track.score || 0) > 0 ? `+${track.score}` : (track.score ?? 0)}
                     </span>
 
                     {/* Голосование */}
