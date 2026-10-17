@@ -28,10 +28,12 @@ import {
   LogOut,
   Share2,
   Flag,
+  SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { audioService } from "@/lib/audioService";
 import { QRCode } from "@/components/QRCode.jsx";
+import { EqualizerModal } from "@/components/EqualizerModal.jsx";
 
 const STUDIO_TRACKS = [
   {
@@ -148,6 +150,7 @@ export function PartyPage() {
   const [modalAddTrack, setModalAddTrack] = useState(false);
   const [modalStop, setModalStop] = useState(false);
   const [modalInvite, setModalInvite] = useState(false);
+  const [isEqualizerOpen, setIsEqualizerOpen] = useState(false);
   const [serverAddress, setServerAddress] = useState("");
   const [addTrackTab, setAddTrackTab] = useState("library"); // library | custom
   const [trackSearch, setTrackSearch] = useState("");
@@ -1216,6 +1219,14 @@ export function PartyPage() {
                 <Play size={17} className="fill-[#a3e635] text-[#a3e635] ml-0.5" />
               )}
             </button>
+            <button
+              type="button"
+              onClick={() => setIsEqualizerOpen(true)}
+              title="Эквалайзер (Web Audio API)"
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-[#1c231d] border border-[#2e402d] text-neutral-400 hover:text-[#a3e635] hover:bg-[#243025] transition-colors cursor-pointer"
+            >
+              <SlidersHorizontal size={17} />
+            </button>
           </div>
         </div>
       </div>
@@ -1473,6 +1484,8 @@ export function PartyPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <EqualizerModal open={isEqualizerOpen} onOpenChange={setIsEqualizerOpen} />
     </div>
   );
 }

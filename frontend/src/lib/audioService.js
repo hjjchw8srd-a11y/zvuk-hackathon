@@ -1,20 +1,66 @@
 /**
- * audioService.js - Web Audio API synthesizer + HTML5 Audio streaming
- * Supports real audible playback for library tracks, mock tracks, and uploaded audio.
+ * audioService.js - Web Audio API synthesizer + HTML5 Audio streaming + 5-Band Equalizer
+ * Real-time audio processing with presets, smooth transitions, and CORS support.
  */
+
+export const EQUALIZER_FREQUENCIES = [
+  { freq: 60, label: "60 Гц", sub: "Саб-бас", type: "lowshelf" },
+  { freq: 230, label: "230 Гц", sub: "Бас", type: "peaking" },
+  { freq: 910, label: "910 Гц", sub: "Вокал", type: "peaking" },
+  { freq: 4000, label: "4 кГц", sub: "Яркость", type: "peaking" },
+  { freq: 14000, label: "14 кГц", sub: "Воздух", type: "highshelf" },
+];
+
+export const EQUALIZER_PRESETS = {
+  "Flat": { name: "Flat", label: "Flat (По умолчанию)", bands: [0, 0, 0, 0, 0] },
+  "Bass Boost": { name: "Bass Boost", label: "Bass Boost (Усиление баса)", bands: [6, 4, 0, 1, 2] },
+  "Vocal": { name: "Vocal", label: "Vocal (Акцент на голос)", bands: [-2, 0, 5, 3, -1] },
+  "Electronic": { name: "Electronic", label: "Electronic (Электроника)", bands: [5, 2, -2, 3, 4] },
+  "Rock": { name: "Rock", label: "Rock / Metal", bands: [4, 1, -1, 3, 5] },
+  "Acoustic": { name: "Acoustic", label: "Acoustic", bands: [2, 3, 2, 1, 2] },
+};
 
 class SoundEngine {
   constructor() {
     this.audio = null;
     this.context = null;
+    this.sourceNode = null;
+    this.filters = [];
     this.master = null;
+    this.synthMaster = null;
     this.synthTimer = null;
     this.currentTrack = null;
     this.isPlaying = false;
     this.volume = 0.7;
     this.offset = 0;
     this.started = 0;
+
+    // Equalizer state
+    this.isEqualizerEnabled = true;
+    this.activePreset = "Flat";
+    this.equalizerBands = [0, 0, 0, 0, 0];
+
+    // Load saved settings if available
+    if (typeof window !== "undefined") {
+      try {
+        const saved = localStorage.getItem("sound_equalizer_settings");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed.bands) && parsed.bands.length === 5) {
+            this.equalizerBands = parsed.bands;
+          }
+          if (typeof parsed.isEnabled === "boolean") {
+            this.isEqualizerEnabled = parsed.isEnabled;
+          }
+          if (parsed.activePreset) {
+            this.activePreset = parsed.activePreset;
+          }
+        }
+      } catch {}
+    }
+
     this.listeners = new Set();
+    this.equalizerListeners = new Set();
 
     this.timer = setInterval(() => {
       if (this.isPlaying) {
@@ -43,6 +89,15 @@ class SoundEngine {
     return () => this.listeners.delete(listener);
   }
 
+  subscribeEqualizer(listener) {
+    this.equalizerListeners.add(listener);
+    // Immediately emit current state
+    try {
+      listener(this.getEqualizerState());
+    } catch {}
+    return () => this.equalizerListeners.delete(listener);
+  }
+
   notify() {
     for (const fn of this.listeners) {
       try {
@@ -57,10 +112,198 @@ class SoundEngine {
     }
   }
 
-  unlock() {
-    if (this.context && this.context.state === "suspended") {
+  notifyEqualizer() {
+    const state = this.getEqualizerState();
+    for (const fn of this.equalizerListeners) {
+      try {
+        fn(state);
+      } catch {}
+    }
+  }
+
+  getEqualizerState() {
+    return {
+      isEnabled: this.isEqualizerEnabled,
+      activePreset: this.activePreset,
+      bands: [...this.equalizerBands],
+      presets: EQUALIZER_PRESETS,
+      frequencies: EQUALIZER_FREQUENCIES,
+    };
+  }
+
+  saveEqualizerSettings() {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem(
+          "sound_equalizer_settings",
+          JSON.stringify({
+            isEnabled: this.isEqualizerEnabled,
+            activePreset: this.activePreset,
+            bands: this.equalizerBands,
+          })
+        );
+      } catch {}
+    }
+  }
+
+  /**
+   * Lazy initialization of Web Audio API graph and persistent HTMLAudioElement
+   */
+  ensureAudioContext() {
+    if (typeof window === "undefined") return null;
+
+    if (!this.context) {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return null;
+
+      const ctx = (this.context = new AudioCtx());
+
+      // Master gain node
+      this.master = ctx.createGain();
+      this.master.gain.setValueAtTime(this.volume, ctx.currentTime);
+      this.master.connect(ctx.destination);
+
+      // Create 5 BiquadFilterNodes
+      this.filters = EQUALIZER_FREQUENCIES.map((item, idx) => {
+        const filter = ctx.createBiquadFilter();
+        filter.type = item.type;
+        filter.frequency.setValueAtTime(item.freq, ctx.currentTime);
+        if (item.type === "peaking") {
+          filter.Q.setValueAtTime(1.0, ctx.currentTime);
+        }
+        const initialGain = this.isEqualizerEnabled ? this.equalizerBands[idx] : 0;
+        filter.gain.setValueAtTime(initialGain, ctx.currentTime);
+        return filter;
+      });
+
+      // Chain: filter[0] -> filter[1] -> filter[2] -> filter[3] -> filter[4] -> master -> destination
+      for (let i = 0; i < this.filters.length - 1; i++) {
+        this.filters[i].connect(this.filters[i + 1]);
+      }
+      this.filters[this.filters.length - 1].connect(this.master);
+
+      // Setup audio element and connect source if already created
+      this.attachAudioElementSource();
+    }
+
+    if (this.context.state === "suspended") {
       this.context.resume().catch(() => {});
     }
+
+    return this.context;
+  }
+
+  getAudioElement() {
+    if (this.audio) return this.audio;
+
+    const audio = new Audio();
+    // Enable CORS to avoid Web Audio API cross-origin security restrictions
+    audio.crossOrigin = "anonymous";
+    audio.preload = "auto";
+    audio.volume = 1.0; // Volume is managed via Web Audio master GainNode
+    audio.addEventListener("ended", () => this.finish());
+    audio.addEventListener("error", (e) => {
+      console.warn("Audio playback error, falling back to synth:", e);
+      if (this.isPlaying) this.startSynth();
+    });
+
+    this.audio = audio;
+    this.attachAudioElementSource();
+    return audio;
+  }
+
+  attachAudioElementSource() {
+    if (!this.context || !this.audio || this.sourceNode) return;
+    try {
+      this.sourceNode = this.context.createMediaElementSource(this.audio);
+      if (this.filters.length > 0) {
+        this.sourceNode.connect(this.filters[0]);
+      } else if (this.master) {
+        this.sourceNode.connect(this.master);
+      }
+    } catch (err) {
+      console.warn("Could not create MediaElementSourceNode:", err);
+    }
+  }
+
+  /**
+   * Set gain for a specific band (-12 dB to +12 dB) with smooth ramp
+   */
+  setBandGain(index, gainValue) {
+    if (index < 0 || index >= this.equalizerBands.length) return;
+    const clamped = Math.max(-12, Math.min(12, Math.round(Number(gainValue) * 10) / 10));
+    this.equalizerBands[index] = clamped;
+
+    this.ensureAudioContext();
+
+    if (this.context && this.filters[index]) {
+      const target = this.isEqualizerEnabled ? clamped : 0;
+      // Exponential / targetAtTime smoothing prevents clicks/pops
+      this.filters[index].gain.setTargetAtTime(target, this.context.currentTime, 0.015);
+    }
+
+    // Check if current band values match any known preset
+    let matchingPreset = "Custom";
+    for (const [key, preset] of Object.entries(EQUALIZER_PRESETS)) {
+      const match = preset.bands.every((b, i) => Math.abs(b - this.equalizerBands[i]) < 0.1);
+      if (match) {
+        matchingPreset = key;
+        break;
+      }
+    }
+    this.activePreset = matchingPreset;
+
+    this.saveEqualizerSettings();
+    this.notifyEqualizer();
+  }
+
+  /**
+   * Apply a preset by name
+   */
+  setPreset(presetName) {
+    const preset = EQUALIZER_PRESETS[presetName];
+    if (!preset) return;
+
+    this.equalizerBands = [...preset.bands];
+    this.activePreset = presetName;
+
+    this.ensureAudioContext();
+
+    if (this.context && this.filters.length > 0) {
+      this.filters.forEach((filter, i) => {
+        const target = this.isEqualizerEnabled ? this.equalizerBands[i] : 0;
+        filter.gain.setTargetAtTime(target, this.context.currentTime, 0.02);
+      });
+    }
+
+    this.saveEqualizerSettings();
+    this.notifyEqualizer();
+  }
+
+  /**
+   * Master equalizer toggle (enable / bypass)
+   */
+  setEqualizerEnabled(enabled) {
+    this.isEqualizerEnabled = Boolean(enabled);
+    this.ensureAudioContext();
+
+    if (this.context && this.filters.length > 0) {
+      this.filters.forEach((filter, i) => {
+        const target = this.isEqualizerEnabled ? this.equalizerBands[i] : 0;
+        filter.gain.setTargetAtTime(target, this.context.currentTime, 0.025);
+      });
+    }
+
+    this.saveEqualizerSettings();
+    this.notifyEqualizer();
+  }
+
+  resetEqualizer() {
+    this.setPreset("Flat");
+  }
+
+  unlock() {
+    this.ensureAudioContext();
     if (this.audio && this.isPlaying && this.audio.paused) {
       this.audio.play().then(() => {
         this.stopSynth();
@@ -72,6 +315,8 @@ class SoundEngine {
 
   async play(track, audioUrl = null) {
     if (!track) return;
+
+    this.ensureAudioContext();
 
     // If same track and paused, resume
     if (this.currentTrack?.id === track.id && !this.isPlaying) {
@@ -107,17 +352,8 @@ class SoundEngine {
       : null);
 
     if (streamUrl) {
-      const audio = new Audio();
-      audio.preload = "auto";
+      const audio = this.getAudioElement();
       audio.src = streamUrl;
-      audio.volume = this.volume;
-      audio.addEventListener("ended", () => this.finish());
-      audio.addEventListener("error", () => {
-        // Fallback to synth if stream fails
-        this.audio = null;
-        if (this.isPlaying) this.startSynth();
-      });
-      this.audio = audio;
       try {
         await audio.play();
       } catch {
@@ -141,8 +377,8 @@ class SoundEngine {
   stop() {
     this.pause();
     if (this.audio) {
-      this.audio.src = "";
-      this.audio = null;
+      this.audio.pause();
+      this.audio.currentTime = 0;
     }
     this.stopSynth();
     this.offset = 0;
@@ -163,8 +399,12 @@ class SoundEngine {
 
   setVolume(val) {
     this.volume = Math.max(0, Math.min(1, Number(val)));
-    if (this.audio) this.audio.volume = this.volume;
-    if (this.master) this.master.gain.value = this.volume * 0.15;
+    if (this.master && this.context) {
+      this.master.gain.setTargetAtTime(this.volume, this.context.currentTime, 0.02);
+    }
+    if (this.audio && !this.sourceNode) {
+      this.audio.volume = this.volume;
+    }
   }
 
   finish() {
@@ -179,15 +419,20 @@ class SoundEngine {
       clearInterval(this.synthTimer);
       this.synthTimer = null;
     }
-    if (this.context) {
-      this.context.close().catch(() => {});
-      this.context = null;
-      this.master = null;
+    if (this.synthMaster) {
+      try {
+        this.synthMaster.disconnect();
+      } catch {}
+      this.synthMaster = null;
     }
   }
 
   startSynth() {
     this.stopSynth();
+    this.ensureAudioContext();
+    if (!this.context) return;
+
+    const ctx = this.context;
     const key = this.currentTrack?.library_key || "dawn";
     const noteMap = {
       dawn: [261.63, 329.63, 392.0, 523.25], // C4, E4, G4, C5
@@ -199,24 +444,22 @@ class SoundEngine {
     };
 
     const notes = noteMap[key] || [220, 277.18, 329.63, 440];
-    const AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
+    const synthMaster = (this.synthMaster = ctx.createGain());
+    synthMaster.gain.setValueAtTime(0.35, ctx.currentTime);
 
-    const ctx = (this.context = new AudioCtx());
-    if (ctx.state === "suspended") {
-      ctx.resume().catch(() => {});
+    // Route synth through the equalizer graph as well!
+    if (this.filters.length > 0) {
+      synthMaster.connect(this.filters[0]);
+    } else if (this.master) {
+      synthMaster.connect(this.master);
     }
-
-    const master = (this.master = ctx.createGain());
-    master.gain.value = this.volume * 0.15;
-    master.connect(ctx.destination);
 
     let beat = Math.floor(this.offset / 0.32);
     const tick = () => {
-      if (!this.context || this.context.state === "closed") return;
+      if (!this.context || this.context.state === "closed" || !this.synthMaster) return;
       const at = this.context.currentTime + 0.02;
 
-      // Мелодический тон
+      // Melody note
       const osc = this.context.createOscillator();
       const gain = this.context.createGain();
       osc.type = key === "night" ? "sawtooth" : "sine";
@@ -228,11 +471,11 @@ class SoundEngine {
       gain.gain.exponentialRampToValueAtTime(0.001, at + 0.29);
 
       osc.connect(gain);
-      gain.connect(master);
+      gain.connect(synthMaster);
       osc.start(at);
       osc.stop(at + 0.31);
 
-      // Басовая партия на сильную долю
+      // Bass note on downbeats
       if (beat % 4 === 0) {
         const bass = this.context.createOscillator();
         const bg = this.context.createGain();
@@ -243,7 +486,7 @@ class SoundEngine {
         bg.gain.exponentialRampToValueAtTime(0.001, at + 0.55);
 
         bass.connect(bg);
-        bg.connect(master);
+        bg.connect(synthMaster);
         bass.start(at);
         bass.stop(at + 0.57);
       }
