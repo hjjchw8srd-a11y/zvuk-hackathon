@@ -1,4 +1,5 @@
-import { Route, Routes, useLocation } from "react-router-dom";
+import { useEffect } from "react";
+import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { MainPage } from "./pages/MainPage.jsx";
 import { PlaylistPage } from "./pages/PlaylistPage.jsx";
 import { LibraryPage } from "./pages/LibraryPage.jsx";
@@ -10,6 +11,35 @@ import { AuthProvider } from "./lib/auth.jsx";
 
 export default function App() {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const code = params.get("invite") || params.get("join") || params.get("code");
+    if (code) {
+      const token = localStorage.getItem("token");
+      const headers = {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      };
+      fetch("/api/join", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ code: code.trim().toUpperCase() }),
+      })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
+          if (data?.id) {
+            if (data.access_token) {
+              localStorage.setItem("token", data.access_token);
+            }
+            window.dispatchEvent(new Event("communities_updated"));
+            navigate(`/community/${data.id}`, { replace: true });
+          }
+        })
+        .catch(() => {});
+    }
+  }, [location.search, navigate]);
 
   return (
     <AuthProvider>

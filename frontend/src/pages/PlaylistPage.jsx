@@ -1269,7 +1269,7 @@ export function PlaylistPage() {
             <div>
               <label className="block text-xs font-semibold text-neutral-400 mb-1.5">Ссылка-приглашение</label>
               <div className="flex items-center gap-2">
-                <input readOnly value="https://playlist.itfac.ru/join/xK9mPq3r"
+                <input readOnly value={`${window.location.origin}/community/${playlist.id || currentRoomId || ""}`}
                   className="flex-1 bg-[#1c1c1c] border border-[#262626] rounded-xl px-3 py-2.5 text-sm text-[#a3e635] font-mono outline-none" />
                 <button onClick={copyInviteLink}
                   className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-[#1c231d] border border-[#2e402d] text-white text-sm font-semibold hover:bg-[#243025] transition-colors shrink-0 cursor-pointer">
@@ -1281,7 +1281,7 @@ export function PlaylistPage() {
             <div>
               <label className="block text-xs font-semibold text-neutral-400 mb-1.5">Код доступа</label>
               <div className="flex items-center justify-between bg-[#1c231d] border border-[#2e402d] rounded-xl px-4 py-3">
-                <span className="text-2xl font-black tracking-widest text-white">XK9M·PQ3R</span>
+                <span className="text-2xl font-black tracking-widest text-white">{playlist.inviteCode || "ZVUK26"}</span>
                 <span className="text-xs text-neutral-400">Введи в приложении</span>
               </div>
             </div>
