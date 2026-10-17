@@ -6,9 +6,11 @@ from pydantic import BaseModel, EmailStr, Field
 
 class UserOut(BaseModel):
     id: uuid.UUID
-    display_name: str | None
+    username: str | None = None
+    display_name: str | None = None
     email: str | None = None
     avatar_url: str | None = None
+    is_superuser: bool = False
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -17,7 +19,8 @@ class UserOut(BaseModel):
 class UserPublic(BaseModel):
     """Minimal user info exposed to other community members."""
     id: uuid.UUID
-    display_name: str | None
+    username: str | None = None
+    display_name: str | None = None
     avatar_url: str | None = None
 
     model_config = {"from_attributes": True}
@@ -26,13 +29,15 @@ class UserPublic(BaseModel):
 # ── Auth Schemas ────────────────────────────────────────────────────────────
 
 class RegisterRequest(BaseModel):
-    email: str = Field(min_length=5, max_length=255)
+    username: str = Field(min_length=2, max_length=60)
+    email: str | None = Field(default=None, max_length=255)
     password: str = Field(min_length=6, max_length=128)
-    display_name: str = Field(min_length=2, max_length=60)
+    display_name: str | None = Field(default=None, max_length=100)
 
 
 class LoginRequest(BaseModel):
-    email: str
+    login: str | None = None
+    email: str | None = None
     password: str
 
 

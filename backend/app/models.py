@@ -13,9 +13,11 @@ from datetime import datetime
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     ForeignKeyConstraint,
     Index,
@@ -82,10 +84,14 @@ class User(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
+    username: Mapped[str | None] = mapped_column(String(60), unique=True, nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), unique=True)
     password_hash: Mapped[str | None] = mapped_column(String(255))
     display_name: Mapped[str | None] = mapped_column(String(100))
     avatar_url: Mapped[str | None] = mapped_column(String(500))
+    is_superuser: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), default=False, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -96,6 +102,7 @@ class User(Base):
 
     __table_args__ = (
         Index("ix_users_email", "email", unique=True, postgresql_where=text("email IS NOT NULL")),
+        Index("ix_users_username", "username", unique=True, postgresql_where=text("username IS NOT NULL")),
     )
 
 
@@ -213,6 +220,9 @@ class Track(Base):
     duration_seconds: Mapped[int] = mapped_column(
         Integer, server_default=text("0"), nullable=False
     )
+    duration: Mapped[float] = mapped_column(
+        Float, server_default=text("0.0"), default=0.0, nullable=False
+    )
     source_type: Mapped[TrackSource] = mapped_column(
         enum_type(TrackSource, "track_source"), nullable=False
     )
@@ -222,6 +232,14 @@ class Track(Base):
     mime_type: Mapped[str | None] = mapped_column(String(100))
     size_bytes: Mapped[int | None] = mapped_column(BigInteger)
     checksum_sha256: Mapped[str | None] = mapped_column(String(64))
+    file_hash: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    normalized_signature: Mapped[str | None] = mapped_column(String(255), nullable=True, index=True)
+    license_type: Mapped[str] = mapped_column(
+        String(100), server_default=text("'CC / User Upload'"), default="CC / User Upload", nullable=False
+    )
+    dmca_reports_count: Mapped[int] = mapped_column(
+        Integer, server_default=text("0"), default=0, nullable=False
+    )
     moderation_status: Mapped[ModerationStatus] = mapped_column(
         enum_type(ModerationStatus, "moderation_status"),
         server_default=ModerationStatus.PENDING.value,
@@ -712,3 +730,21 @@ class PartyVote(Base):
         UniqueConstraint("party_queue_item_id", "user_id", name="uq_party_votes_item_user"),
         Index("ix_party_votes_item_id", "party_queue_item_id"),
     )
+
+
+class BlacklistedTrack(Base):
+    __tablename__ = "blacklisted_tracks"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    file_hash: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    normalized_signature: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+    duration: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    reason: Mapped[str] = mapped_column(
+        String(255), server_default=text("'DMCA violation'"), default="DMCA violation", nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+

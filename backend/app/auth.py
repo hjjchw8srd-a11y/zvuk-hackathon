@@ -40,6 +40,9 @@ def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("ascii")
 
 
+get_password_hash = hash_password
+
+
 def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode("utf-8"), hashed.encode("ascii"))
 
@@ -95,8 +98,10 @@ def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
     db: Session = Depends(get_db),
 ) -> User:
-    """Resolve current user from JWT, then cookie, then create a guest."""
-
+    """Strictly resolve current user from JWT Bearer token or existing cookie.
+    
+    Raises 401 Unauthorized if not authenticated.
+    """
     # 1. Try JWT Bearer token
     if credentials is not None:
         user_id = decode_access_token(credentials.credentials)
@@ -104,35 +109,19 @@ def get_current_user(
             user = db.get(User, user_id)
             if user is not None:
                 return user
-        raise HTTPException(status_code=401, detail="Недействительный токен")
+        raise HTTPException(status_code=401, detail="Недействительный токен авторизации")
 
-    # 2. Try legacy cookie
-    user_id = _decode_cookie(request.cookies.get(COOKIE_NAME))
-    user = db.get(User, user_id) if user_id else None
-    if user is not None:
-        return user
+    # 2. Try cookie
+    cookie_token = request.cookies.get(COOKIE_NAME)
+    if cookie_token:
+        user_id = _decode_cookie(cookie_token)
+        if user_id:
+            user = db.get(User, user_id)
+            if user is not None and (user.email is not None or user.password_hash is not None):
+                return user
 
-    # 3. Create anonymous guest
-    user = User(display_name="Новый слушатель")
-    db.add(user)
-    db.flush()
-
-    base_room = db.scalar(select(Room).where(Room.name == "ИИНОД-82", Room.is_active.is_(True)))
-    if base_room is not None:
-        db.add(RoomMember(room_id=base_room.id, user_id=user.id, role=MemberRole.MEMBER))
-
-    db.commit()
-    db.refresh(user)
-    token = f"{user.id}.{_cookie_signature(user.id)}"
-    response.set_cookie(
-        COOKIE_NAME,
-        token,
-        max_age=COOKIE_MAX_AGE,
-        httponly=True,
-        samesite="lax",
-        secure=False,
-    )
-    return user
+    # 3. No guest fallback — strict auth gate!
+    raise HTTPException(status_code=401, detail="Требуется авторизация для доступа к платформе")
 
 
 def require_registered_user(
@@ -141,8 +130,12 @@ def require_registered_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
     db: Session = Depends(get_db),
 ) -> User:
-    """Like get_current_user but raises 401 if user has no email/password."""
-    user = get_current_user(request, response, credentials, db)
-    if user.email is None:
-        raise HTTPException(status_code=401, detail="Требуется авторизация")
+    """Equivalent to get_current_user."""
+    return get_current_user(request, response, credentials, db)
+
+
+def require_superuser(user: User = Depends(get_current_user)) -> User:
+    """Check that current user has superuser privileges."""
+    if not getattr(user, "is_superuser", False):
+        raise HTTPException(status_code=403, detail="Доступ запрещен. Требуются права глобального администратора.")
     return user

@@ -1,7 +1,7 @@
 """Authentication endpoints: register, login, current user."""
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.auth import (
@@ -19,18 +19,34 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
-    """Зарегистрировать нового пользователя по email и паролю."""
-    email_lower = payload.email.strip().lower()
-    existing = db.scalar(select(User).where(User.email == email_lower))
-    if existing is not None:
+    """Зарегистрировать нового пользователя по username/email и паролю."""
+    clean_username = payload.username.strip()
+    if len(clean_username) < 2:
+        raise HTTPException(status_code=400, detail="Имя пользователя должно содержать минимум 2 символа")
+
+    existing_username = db.scalar(
+        select(User).where(func.lower(User.username) == clean_username.lower())
+    )
+    if existing_username is not None:
+        raise HTTPException(
+            status_code=409, detail="Пользователь с таким именем уже существует"
+        )
+
+    email_lower = (payload.email.strip().lower() if payload.email else f"{clean_username.lower()}@ritm.local")
+    existing_email = db.scalar(select(User).where(User.email == email_lower))
+    if existing_email is not None:
         raise HTTPException(
             status_code=409, detail="Пользователь с таким email уже существует"
         )
 
+    disp_name = payload.display_name.strip() if payload.display_name else clean_username
+
     user = User(
+        username=clean_username,
         email=email_lower,
         password_hash=hash_password(payload.password),
-        display_name=payload.display_name.strip(),
+        display_name=disp_name,
+        is_superuser=False,
     )
     db.add(user)
     db.flush()
@@ -50,13 +66,22 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    """Войти по email и паролю, получить JWT токен."""
-    email_lower = payload.email.strip().lower()
-    user = db.scalar(select(User).where(User.email == email_lower))
+    """Войти по username/email и паролю, получить JWT токен."""
+    ident = (payload.login or payload.email or "").strip()
+    if not ident:
+        raise HTTPException(status_code=400, detail="Укажите логин или email")
+
+    ident_lower = ident.lower()
+    user = db.scalar(
+        select(User).where(
+            (func.lower(User.email) == ident_lower) |
+            (func.lower(User.username) == ident_lower)
+        )
+    )
     if user is None or user.password_hash is None:
-        raise HTTPException(status_code=401, detail="Неверный email или пароль")
+        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
     if not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Неверный email или пароль")
+        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
 
     return TokenResponse(
         access_token=create_access_token(user.id),

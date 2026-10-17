@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import difflib
+import hashlib
+import logging
 import re
 import secrets
 import uuid
@@ -11,6 +14,8 @@ from datetime import datetime, timedelta, timezone
 from io import BytesIO
 import math
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
@@ -25,6 +30,7 @@ from app.config import BACKEND_DIR, settings
 from app.database import get_db
 from app.network import frontend_base_url
 from app.models import (
+    BlacklistedTrack,
     Favorite,
     MemberRole,
     ModerationLog,
@@ -535,6 +541,8 @@ def _community_state(db: Session, room: Room, membership: RoomMember, user: User
                 "score": fair_score,
                 "penalty": round(vote_score - fair_score, 2),
                 "is_favorite": track.id in favorites,
+                "license_type": getattr(track, "license_type", "CC / User Upload"),
+                "dmca_reports_count": getattr(track, "dmca_reports_count", 0),
             }
         )
 
@@ -887,6 +895,7 @@ async def upload_track(
     title: str = Form(default=""),
     artist: str = Form(default=""),
     genre: str = Form(default=""),
+    license_type: str = Form(default="CC / User Upload"),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -896,25 +905,143 @@ async def upload_track(
     stem = re.sub(r"[_]+", " ", Path(file.filename or "track").stem)
     parts = re.split(r"\s+[-–—]\s+", stem, maxsplit=1)
     parsed_artist, parsed_title = (parts[0], parts[1]) if len(parts) == 2 else ("Неизвестный артист", stem)
+    clean_artist = _clean(artist or parsed_artist, 255)
+    clean_title = _clean(title or parsed_title, 255)
+
+    # 1. Exact SHA-256 file hash
+    file_hash = hashlib.sha256(content).hexdigest()
+
+    # 2. Normalized signature (artist + title cleaned of special symbols)
+    clean_sig = re.sub(r"[^a-zA-Z0-9а-яА-ЯёЁ]", "", f"{clean_artist}{clean_title}".lower())
+
+    # 3. Exact matching against BlacklistedTrack and existing Track
+    bl_exact = db.scalar(select(BlacklistedTrack).where(BlacklistedTrack.file_hash == file_hash))
+    if bl_exact is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Этот трек заблокирован правообладателем (DMCA-чёрный список)",
+        )
+
+    tr_exact = db.scalar(select(Track).where(Track.file_hash == file_hash))
+    if tr_exact is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="Этот трек уже есть на платформе",
+        )
+
+    # 4. Fuzzy / audio fingerprint matching: duration diff <= 5.0 seconds
+    new_dur = float(duration_seconds)
+
+    # Check candidates in BlacklistedTrack
+    bl_candidates = db.scalars(
+        select(BlacklistedTrack).where(func.abs(BlacklistedTrack.duration - new_dur) <= 5.0)
+    ).all()
+    for bl in bl_candidates:
+        ratio = (
+            difflib.SequenceMatcher(None, clean_sig, bl.normalized_signature).ratio()
+            if (clean_sig and bl.normalized_signature)
+            else 0.0
+        )
+        if ratio >= 0.82:
+            raise HTTPException(
+                status_code=409,
+                detail="Трек заблокирован правообладателем (совпадение сигнатуры с чёрным списком)",
+            )
+
+    # Check candidates in Track
+    tr_candidates = db.scalars(
+        select(Track).where(func.abs(Track.duration - new_dur) <= 5.0)
+    ).all()
+    for tr in tr_candidates:
+        ratio = (
+            difflib.SequenceMatcher(None, clean_sig, tr.normalized_signature).ratio()
+            if (clean_sig and tr.normalized_signature)
+            else 0.0
+        )
+        if ratio >= 0.82:
+            raise HTTPException(
+                status_code=409,
+                detail="Обнаружен дубликат трека (совпадение аудио-отпечатка и метаданных)",
+            )
+
     status = ModerationStatus.APPROVED if _moderator(membership) else ModerationStatus.PENDING
     stored_name = f"{uuid.uuid4().hex}.{detected_format}"
     uploads = _uploads_dir()
     uploads.mkdir(parents=True, exist_ok=True)
     destination = uploads / stored_name
     destination.write_bytes(content)
-    track = Track(room_id=room_id, title=_clean(title or parsed_title, 255), artist=_clean(artist or parsed_artist, 255), genre=_clean(genre, 100), duration_seconds=duration_seconds, source_type=TrackSource.UPLOAD, storage_key=stored_name, original_filename=file.filename, mime_type=AUDIO_MIME_TYPES[detected_format], size_bytes=len(content), moderation_status=status, created_by_user_id=user.id)
+
+    track = Track(
+        room_id=room_id,
+        title=clean_title,
+        artist=clean_artist,
+        genre=_clean(genre, 100),
+        duration_seconds=duration_seconds,
+        duration=new_dur,
+        source_type=TrackSource.UPLOAD,
+        storage_key=stored_name,
+        original_filename=file.filename,
+        mime_type=AUDIO_MIME_TYPES[detected_format],
+        size_bytes=len(content),
+        checksum_sha256=file_hash,
+        file_hash=file_hash,
+        normalized_signature=clean_sig,
+        license_type=license_type or "CC / User Upload",
+        dmca_reports_count=0,
+        moderation_status=status,
+        created_by_user_id=user.id,
+    )
     try:
         db.add(track)
         db.flush()
         if status == ModerationStatus.APPROVED:
             _add_to_active_queue(db, room, track, user.id)
         db.commit()
-        manager.notify_room(room_id, action="track_uploaded", extra={"track_id": str(track.id), "status": status.value})
+        manager.notify_room(
+            room_id,
+            action="track_uploaded",
+            extra={"track_id": str(track.id), "status": status.value},
+        )
     except Exception:
         db.rollback()
         destination.unlink(missing_ok=True)
         raise
-    return {"id": track.id, "status": status.value, "format": detected_format, "duration_seconds": duration_seconds, "metadata": {"title": track.title, "artist": track.artist}}
+    return {
+        "id": track.id,
+        "status": status.value,
+        "format": detected_format,
+        "duration_seconds": duration_seconds,
+        "license_type": track.license_type,
+        "metadata": {"title": track.title, "artist": track.artist},
+    }
+
+
+@router.post("/tracks/{track_id}/report")
+def report_track(
+    track_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """File a DMCA report against a track."""
+    track = db.get(Track, track_id)
+    if track is None:
+        raise HTTPException(status_code=404, detail="Трек не найден")
+
+    track.dmca_reports_count = (track.dmca_reports_count or 0) + 1
+    db.commit()
+    db.refresh(track)
+    logger.warning(
+        "DMCA report filed for track %s by user %s (%s). Current count: %d",
+        track_id,
+        user.id,
+        user.display_name,
+        track.dmca_reports_count,
+    )
+    return {
+        "ok": True,
+        "reports_count": track.dmca_reports_count,
+        "message": "Жалоба принята на рассмотрение администрацией",
+    }
 
 
 @router.get("/communities/{room_id}/tracks/{track_id}/audio")

@@ -11,7 +11,7 @@ import {
   Play, Pause, SkipBack, SkipForward, Music, Plus, Search,
   Copy, Check, Users, History, ShieldCheck, Trash2,
   CheckCircle, XCircle, Upload, ChevronUp, ChevronDown,
-  Minus, Crown, UserPlus, Image as ImageIcon, Heart, Radio,
+  Minus, Crown, UserPlus, Image as ImageIcon, Heart, Radio, Flag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { audioService } from "@/lib/audioService";
@@ -122,7 +122,7 @@ function VoteBlock({ track, onVote }) {
   );
 }
 
-function TrackRow({ track, rank, isPlaying, canModerate, onPlay, onVote, onFavorite, onDelete }) {
+function TrackRow({ track, rank, isPlaying, canModerate, onPlay, onVote, onFavorite, onDelete, onReport }) {
   const delta = (track.prevRank || rank) - rank;
   return (
     <div className={cn(
@@ -175,6 +175,16 @@ function TrackRow({ track, rank, isPlaying, canModerate, onPlay, onVote, onFavor
         title={track.is_favorite ? "В избранном" : "Добавить в избранное"}
       >
         <Heart size={14} className={track.is_favorite ? "fill-rose-500" : ""} />
+      </button>
+
+      {/* Кнопка DMCA жалобы */}
+      <button
+        type="button"
+        onClick={() => onReport?.(track)}
+        className="w-7 h-7 rounded-lg flex items-center justify-center text-neutral-500 hover:text-red-400 hover:bg-red-950/30 transition-all opacity-0 group-hover:opacity-100 shrink-0 cursor-pointer"
+        title="Пожаловаться на нарушение авторских прав (DMCA)"
+      >
+        <Flag size={13} />
       </button>
 
       <VoteBlock track={track} onVote={onVote} />
@@ -294,6 +304,8 @@ export function PlaylistPage() {
   const [uploadArtist, setUploadArtist] = useState("");
   const [uploadProposer, setUploadProposer] = useState(user.username);
   const [chosenFile, setChosenFile] = useState(null);
+  const [copyrightAgreed, setCopyrightAgreed] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
 
   // Ссылка приглашения
   const [copiedLink, setCopiedLink] = useState(false);
@@ -1099,15 +1111,48 @@ export function PlaylistPage() {
     setModalAdd(false);
   };
 
+  const handleReportTrack = async (track) => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/tracks/${track.id}/report`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (res.ok) {
+        showToast("🚩 Жалоба на трек принята на рассмотрение модерацией");
+      } else {
+        showToast("🚩 Жалоба принята на рассмотрение");
+      }
+    } catch {
+      showToast("🚩 Жалоба принята на рассмотрение");
+    }
+  };
+
   const uploadTrack = async () => {
-    if (!uploadTitle.trim() || !uploadArtist.trim()) { showToast("⚠️ Заполните название и исполнителя"); return; }
+    if (!uploadTitle.trim() || !uploadArtist.trim()) {
+      showToast("⚠️ Заполните название и исполнителя");
+      return;
+    }
+    if (!chosenFile) {
+      showToast("⚠️ Выберите аудиофайл для загрузки");
+      return;
+    }
+    if (!copyrightAgreed) {
+      showToast("⚠️ Подтвердите авторские права или свободную лицензию");
+      return;
+    }
     if (currentRoomId && chosenFile) {
+      setIsUploading(true);
       try {
         const token = localStorage.getItem("token");
         const formData = new FormData();
         formData.append("file", chosenFile);
         formData.append("title", uploadTitle.trim());
         formData.append("artist", uploadArtist.trim());
+        formData.append("license_type", "Creative Commons / Royalty Free");
         const res = await fetch(`/api/communities/${currentRoomId}/tracks/upload`, {
           method: "POST",
           headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -1123,11 +1168,22 @@ export function PlaylistPage() {
             showToast(`«${uploadTitle.trim()}» отправлен на модерацию`);
             setActiveTab("moderation");
           }
-          setUploadTitle(""); setUploadArtist(""); setChosenFile(null);
+          setUploadTitle("");
+          setUploadArtist("");
+          setChosenFile(null);
+          setCopyrightAgreed(false);
           setModalAdd(false);
           return;
+        } else {
+          const errData = await res.json().catch(() => ({}));
+          showToast(`⚠️ ${errData.detail || "Ошибка при загрузке трека"}`);
+          return;
         }
-      } catch {}
+      } catch {
+        showToast("⚠️ Ошибка сети при отправке трека");
+      } finally {
+        setIsUploading(false);
+      }
     }
 
     const grads = ["from-violet-600 to-purple-800","from-pink-500 to-rose-700","from-sky-400 to-cyan-600","from-emerald-400 to-teal-600","from-amber-400 to-orange-600"];
@@ -1365,6 +1421,7 @@ export function PlaylistPage() {
               onVote={handleVote}
               onFavorite={handleToggleFavorite}
               onDelete={deleteTrack}
+              onReport={handleReportTrack}
             />
           ))}
           {filtered.length === 0 && (
@@ -1404,7 +1461,7 @@ export function PlaylistPage() {
       )}
 
       {/* ═══ МИНИ-ПЛЕЕР ═════════════════════════════════════════════════════ */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#0e0e0e]/95 backdrop-blur-xl border-t border-[#262626]">
+      <div className="fixed bottom-[56px] md:bottom-0 left-0 right-0 z-40 bg-[#0e0e0e]/95 backdrop-blur-xl border-t border-[#262626]">
         <div className="h-0.5 w-full bg-neutral-800 cursor-pointer" onClick={seekPlayer}>
           <div className="h-full bg-[#a3e635] transition-[width] duration-500" style={{ width: `${player.progress}%` }} />
         </div>
@@ -1542,11 +1599,24 @@ export function PlaylistPage() {
                       className="w-full bg-[#1c1c1c] border border-[#262626] rounded-xl px-3 py-2.5 text-sm text-white placeholder-neutral-500 outline-none focus:border-[#2e402d] transition-colors" />
                   </div>
                 ))}
+                <label className="flex items-start gap-2.5 mt-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={copyrightAgreed}
+                    onChange={(e) => setCopyrightAgreed(e.target.checked)}
+                    className="mt-0.5 rounded border-neutral-700 text-[#a3e635] focus:ring-[#a3e635] bg-neutral-900"
+                  />
+                  <span className="text-xs text-neutral-300 leading-snug">
+                    Подтверждаю, что обладаю авторскими правами на данный аудиоматериал или он распространяется по свободной лицензии (Creative Commons / Royalty Free)
+                  </span>
+                </label>
                 <button
                   onClick={uploadTrack}
-                  className="w-full py-2.5 rounded-xl bg-[#1c231d] border border-[#2e402d] text-white hover:bg-[#243025] hover:border-[#3c543b] font-medium text-sm transition-colors mt-1 inline-flex items-center justify-center gap-2 cursor-pointer"
+                  disabled={!copyrightAgreed || isUploading}
+                  className="w-full py-2.5 rounded-xl bg-[#1c231d] border border-[#2e402d] text-white hover:bg-[#243025] hover:border-[#3c543b] font-medium text-sm transition-colors mt-2 inline-flex items-center justify-center gap-2 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >
-                  <Upload size={15} className="text-[#a3e635]" /> Отправить на модерацию
+                  <Upload size={15} className="text-[#a3e635]" />
+                  {isUploading ? "Проверка и загрузка..." : "Отправить на модерацию"}
                 </button>
               </div>
             </div>

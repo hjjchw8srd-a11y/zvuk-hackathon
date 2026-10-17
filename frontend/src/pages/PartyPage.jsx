@@ -27,6 +27,7 @@ import {
   ChevronDown,
   LogOut,
   Share2,
+  Flag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { audioService } from "@/lib/audioService";
@@ -505,33 +506,24 @@ export function PartyPage() {
     }
   };
 
-  // Export tracklist for Yandex Music
-  const handleExportYandex = async () => {
-    const list = partyState?.tracks || [];
-    if (list.length === 0) {
-      showToast("В плейлисте вечеринки пока нет треков для экспорта");
-      return;
-    }
-    const textToCopy = list
-      .map((t) => `${t.artist.trim()} - ${t.title.trim()}`)
-      .join("\n");
-
+  // Report DMCA violation for a track
+  const handleReportTrack = async (track) => {
     try {
-      if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(textToCopy);
+      const token = localStorage.getItem("token");
+      const res = await fetch(`/api/tracks/${track.id}/report`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+      if (res.ok) {
+        showToast("🚩 Жалоба на трек принята на рассмотрение администрацией");
       } else {
-        const textarea = document.createElement("textarea");
-        textarea.value = textToCopy;
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textarea);
+        showToast("🚩 Жалоба на трек принята на рассмотрение");
       }
-      setIsCopied(true);
-      showToast(`✓ Скопировано ${list.length} треков в формате Яндекс Музыки!`);
-      setTimeout(() => setIsCopied(false), 3000);
     } catch {
-      showToast("Ошибка при копировании в буфер обмена");
+      showToast("🚩 Жалоба принята на рассмотрение");
     }
   };
 
@@ -907,60 +899,8 @@ export function PartyPage() {
 
       {/* ═══ ОСНОВНОЙ КОНТЕНТ: 2 КОЛОНКИ ══════════════════════════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* ЛЕВАЯ КОЛОНКА (5 из 12) — Экспорт, Номинации, Гости */}
+        {/* ЛЕВАЯ КОЛОНКА (5 из 12) — Номинации и Гости тусовки */}
         <div className="lg:col-span-5 flex flex-col gap-6">
-          {/* КАРТОЧКА 1: ЭКСПОРТ ДЛЯ ЯНДЕКС МУЗЫКИ */}
-          <div className="rounded-3xl bg-[#171717] border border-[#262626] p-6 shadow-xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl pointer-events-none" />
-
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-xl bg-[#221c17] border border-[#402d1d] flex items-center justify-center text-amber-400">
-                <Music size={20} />
-              </div>
-              <div>
-                <p className="text-[11px] font-bold uppercase tracking-widest text-amber-400">ЭКСПОРТ СЕССИИ</p>
-                <h3 className="text-lg font-bold text-white">Яндекс Музыка</h3>
-              </div>
-            </div>
-
-            <p className="text-xs text-neutral-400 mb-5 leading-relaxed">
-              Скопируйте очередь треков вечеринки в формате «Исполнитель - Трек» для мгновенного импорта в Яндекс Музыку.
-            </p>
-
-            <button
-              onClick={handleExportYandex}
-              className={cn(
-                "w-full py-3.5 px-5 rounded-2xl font-bold text-sm tracking-wide transition-all shadow-xl flex items-center justify-center gap-3 cursor-pointer select-none active:scale-98",
-                isCopied
-                  ? "bg-[#1c231d] border border-[#2e402d] text-[#a3e635]"
-                  : "bg-gradient-to-r from-amber-500 via-orange-500 to-rose-500 hover:opacity-95 text-white shadow-orange-500/20"
-              )}
-            >
-              {isCopied ? (
-                <>
-                  <Check size={18} className="text-[#a3e635]" />
-                  <span>Скопировано в буфер!</span>
-                </>
-              ) : (
-                <>
-                  <Copy size={18} />
-                  <span>Скопировать для Яндекс Музыки</span>
-                </>
-              )}
-            </button>
-
-            <div className="mt-4 pt-4 border-t border-[#242424] flex items-center justify-between text-xs text-neutral-500">
-              <span>{tracksList.length} треков тусовки</span>
-              <a
-                href="https://music.yandex.ru"
-                target="_blank"
-                rel="noreferrer"
-                className="text-amber-400 hover:text-amber-300 font-medium inline-flex items-center gap-1 transition-colors"
-              >
-                Открыть Яндекс Музыку <ExternalLink size={12} />
-              </a>
-            </div>
-          </div>
 
           {/* КАРТОЧКА 2: НОМИНАЦИИ (БЭНГЕР И ХИТМЕЙКЕР) */}
           <div className="rounded-3xl bg-[#171717] border border-[#262626] p-6 shadow-xl relative overflow-hidden flex flex-col gap-4">
@@ -1115,8 +1055,6 @@ export function PartyPage() {
                   (player.trackId === track.id && player.playing) ||
                   (partyState?.playback?.current_track_id === track.id && partyState?.playback?.state === "playing");
                 const medals = ["🥇", "🥈", "🥉"];
-                const yandexQuery = encodeURIComponent(`${track.artist} ${track.title}`);
-                const yandexUrl = `https://music.yandex.ru/search?text=${yandexQuery}`;
 
                 return (
                   <div
@@ -1212,16 +1150,14 @@ export function PartyPage() {
                       </button>
                     </div>
 
-                    {/* Поиск в Яндекс Музыке */}
-                    <a
-                      href={yandexUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="w-8 h-8 rounded-xl bg-[#1c1c1c] border border-[#2b2b2b] hover:bg-[#252525] hover:border-amber-500/50 text-neutral-400 hover:text-amber-400 flex items-center justify-center shrink-0 transition-all cursor-pointer"
-                      title="Найти трек в Яндекс Музыке"
+                    {/* DMCA жалоба */}
+                    <button
+                      onClick={() => handleReportTrack(track)}
+                      className="w-8 h-8 rounded-xl bg-[#1c1c1c] border border-[#2b2b2b] hover:bg-red-500/10 hover:border-red-500/40 text-neutral-400 hover:text-red-400 flex items-center justify-center shrink-0 transition-all cursor-pointer"
+                      title="Пожаловаться на нарушение авторских прав (DMCA)"
                     >
-                      <Search size={14} />
-                    </a>
+                      <Flag size={14} />
+                    </button>
                   </div>
                 );
               })}
@@ -1237,7 +1173,7 @@ export function PartyPage() {
       </div>
 
       {/* ═══ МИНИ-ПЛЕЕР ВНИЗУ ═════════════════════════════════════════════════ */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 bg-[#0e0e0e]/95 backdrop-blur-xl border-t border-[#262626]">
+      <div className="fixed bottom-[56px] md:bottom-0 left-0 right-0 z-40 bg-[#0e0e0e]/95 backdrop-blur-xl border-t border-[#262626]">
         <div className="h-0.5 w-full bg-neutral-800">
           <div
             className="h-full bg-[#a3e635] transition-[width] duration-500"

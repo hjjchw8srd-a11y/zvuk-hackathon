@@ -6,21 +6,12 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Проверка сохраненного токена при запуске
+  // Проверка сохраненного токена при загрузке страницы
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) {
-      // Инициализируем сессию через /api/bootstrap, чтобы получить JWT
-      fetch("/api/bootstrap")
-        .then((res) => (res.ok ? res.json() : null))
-        .then((data) => {
-          if (data?.access_token) {
-            localStorage.setItem("token", data.access_token);
-            if (data.user) setUser(data.user);
-          }
-        })
-        .catch(() => {})
-        .finally(() => setLoading(false));
+      setUser(null);
+      setLoading(false);
       return;
     }
 
@@ -37,33 +28,19 @@ export function AuthProvider({ children }) {
         setUser(userData);
       })
       .catch(() => {
-        // Если старый токен протух, запрашиваем свежий гостевой
-        fetch("/api/bootstrap")
-          .then((res) => (res.ok ? res.json() : null))
-          .then((data) => {
-            if (data?.access_token) {
-              localStorage.setItem("token", data.access_token);
-              if (data.user) setUser(data.user);
-            } else {
-              localStorage.removeItem("token");
-              setUser(null);
-            }
-          })
-          .catch(() => {
-            localStorage.removeItem("token");
-            setUser(null);
-          });
+        localStorage.removeItem("token");
+        setUser(null);
       })
       .finally(() => {
         setLoading(false);
       });
   }, []);
 
-  const login = async (email, password) => {
+  const login = async (loginOrEmail, password) => {
     const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ login: loginOrEmail, password }),
     });
 
     const data = await res.json();
@@ -76,15 +53,22 @@ export function AuthProvider({ children }) {
     return data.user;
   };
 
-  const register = async (email, password, displayName) => {
+  const register = async (username, password, email = null, displayName = null) => {
+    const payload = {
+      username: username.trim(),
+      password,
+    };
+    if (email && email.trim()) {
+      payload.email = email.trim();
+    }
+    if (displayName && displayName.trim()) {
+      payload.display_name = displayName.trim();
+    }
+
     const res = await fetch("/api/auth/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        email,
-        password,
-        display_name: displayName,
-      }),
+      body: JSON.stringify(payload),
     });
 
     const data = await res.json();
@@ -99,6 +83,7 @@ export function AuthProvider({ children }) {
 
   const logout = () => {
     localStorage.removeItem("token");
+    sessionStorage.removeItem("auth_redirect_target");
     setUser(null);
   };
 
@@ -107,7 +92,7 @@ export function AuthProvider({ children }) {
       value={{
         user,
         loading,
-        isAuthenticated: !!user && !!user.email,
+        isAuthenticated: !!user,
         login,
         register,
         logout,

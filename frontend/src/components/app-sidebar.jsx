@@ -28,6 +28,7 @@ import {
   LogOut,
   User as UserIcon,
   Flame,
+  ShieldAlert,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -249,17 +250,26 @@ export function AppSidebar() {
           {open && <SidebarGroupLabel>Музыка</SidebarGroupLabel>}
           <SidebarGroupContent>
             <SidebarMenu>
-              {items.map((item) => (
+              {[
+                ...items,
+                ...(user?.is_superuser
+                  ? [{ title: "Админ (DMCA)", url: "/superadmin", icon: ShieldAlert, badge: "ADMIN" }]
+                  : []),
+              ].map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <Link to={item.url} title={item.title} className="flex items-center justify-between w-full">
                       <div className="flex items-center gap-2">
-                        <item.icon className={item.badge ? "text-orange-400" : ""} />
+                        <item.icon className={item.badge === "LIVE" ? "text-orange-400" : (item.badge === "ADMIN" ? "text-purple-400" : "")} />
                         {open && <span>{item.title}</span>}
                       </div>
                       {open && item.badge && (
-                        <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1 animate-pulse">
-                          <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                        <span className={`text-[10px] font-black px-1.5 py-0.2 rounded-full flex items-center gap-1 ${
+                          item.badge === "ADMIN"
+                            ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
+                            : "bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse"
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${item.badge === "ADMIN" ? "bg-purple-400" : "bg-red-400"}`} />
                           {item.badge}
                         </span>
                       )}
@@ -440,6 +450,36 @@ export function AppSidebar() {
             </div>
           </div>
         </button>
+
+        {/* Пользователь и кнопка выхода */}
+        {user && (
+          <div className="w-full mt-2 pt-2 border-t border-neutral-800/80 flex items-center justify-between px-1">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold text-xs">
+                {(user.display_name || user.username || "U")[0].toUpperCase()}
+              </div>
+              {open && (
+                <div className="min-w-0">
+                  <div className="text-xs font-semibold text-white truncate">
+                    {user.display_name || user.username}
+                  </div>
+                  <div className="text-[10px] text-zinc-400 truncate">
+                    {user.is_superuser ? "🛡️ SuperAdmin" : (user.username ? `@${user.username}` : user.email)}
+                  </div>
+                </div>
+              )}
+            </div>
+            {open && (
+              <button
+                onClick={logout}
+                title="Выйти из аккаунта"
+                className="p-1.5 rounded-lg hover:bg-neutral-800 text-neutral-400 hover:text-red-400 transition-colors"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        )}
       </SidebarFooter>
 
       {/* Единый компонент всплывающих окон (popup) */}
