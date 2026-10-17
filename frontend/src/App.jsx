@@ -19,7 +19,7 @@ export default function App() {
       return;
     }
     const params = new URLSearchParams(location.search);
-    const code = params.get("invite") || params.get("code");
+    const code = params.get("invite") || params.get("join") || params.get("code");
     if (code) {
       const token = localStorage.getItem("token");
       const headers = {
@@ -43,7 +43,7 @@ export default function App() {
         })
         .catch(() => {});
     }
-  }, [location.search, navigate]);
+  }, [location.pathname, location.search, navigate]);
 
   return (
     <AuthProvider>

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { audioService } from "@/lib/audioService";
+import { QRCode } from "@/components/QRCode.jsx";
 
 // ─── Заготовки под будущий бэкенд (когда появится авторизация и API) ────────
 const DEFAULT_USER = {
@@ -296,6 +297,21 @@ export function PlaylistPage() {
 
   // Ссылка приглашения
   const [copiedLink, setCopiedLink] = useState(false);
+  const [serverAddress, setServerAddress] = useState("");
+
+  // Получение LAN-адреса для QR-кода и ссылок
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+    fetch("/api/bootstrap", { headers })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((bData) => {
+        if (bData?.sharing?.base_url) {
+          setServerAddress(bData.sharing.base_url);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Тост-уведомления
   const [toast, setToast] = useState(null);
@@ -1125,13 +1141,15 @@ export function PlaylistPage() {
     setModalAdd(false);
   };
 
+  const effectiveHost = serverAddress || (typeof window !== "undefined" ? window.location.origin : "");
+  const currentInviteCode = playlist.inviteCode || "ZVUK26";
+  const resolvedInviteLink = `${effectiveHost}/?invite=${currentInviteCode}`;
+
   const copyInviteLink = () => {
-    const code = playlist.inviteCode || "ZVUK26";
-    const shareUrl = `${window.location.origin}/community/${playlist.id || currentRoomId || ""}`;
-    navigator.clipboard?.writeText(shareUrl).catch(() => {});
+    navigator.clipboard?.writeText(resolvedInviteLink).catch(() => {});
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
-    showToast(`Ссылка с кодом ${code} скопирована!`);
+    showToast(`Ссылка с кодом ${currentInviteCode} скопирована!`);
   };
 
   const filtered = sortedTracks(tracks);
@@ -1548,7 +1566,7 @@ export function PlaylistPage() {
             <div>
               <label className="block text-xs font-semibold text-neutral-400 mb-1.5">Ссылка-приглашение</label>
               <div className="flex items-center gap-2">
-                <input readOnly value={`${window.location.origin}/community/${playlist.id || currentRoomId || ""}`}
+                <input readOnly value={resolvedInviteLink}
                   className="flex-1 bg-[#1c1c1c] border border-[#262626] rounded-xl px-3 py-2.5 text-sm text-[#a3e635] font-mono outline-none" />
                 <button onClick={copyInviteLink}
                   className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl bg-[#1c231d] border border-[#2e402d] text-white text-sm font-semibold hover:bg-[#243025] transition-colors shrink-0 cursor-pointer">
@@ -1560,35 +1578,20 @@ export function PlaylistPage() {
             <div>
               <label className="block text-xs font-semibold text-neutral-400 mb-1.5">Код доступа</label>
               <div className="flex items-center justify-between bg-[#1c231d] border border-[#2e402d] rounded-xl px-4 py-3">
-                <span className="text-2xl font-black tracking-widest text-white">{playlist.inviteCode || "ZVUK26"}</span>
+                <span className="text-2xl font-black tracking-widest text-white">{currentInviteCode}</span>
                 <span className="text-xs text-neutral-400">Введи в приложении</span>
               </div>
             </div>
             <div className="rounded-xl bg-neutral-900/60 border border-[#262626] p-4 flex items-center gap-4">
-              <div className="shrink-0 bg-[#1c1c1c] rounded-xl p-2 border border-[#262626]">
-                <svg width="72" height="72" viewBox="0 0 21 21">
-                  {[
-                    [1,1,1,1,1,1,1,0,1,0,0,0,1,1,1,1,1,1,1,0,0],
-                    [1,0,0,0,0,0,1,0,0,1,0,0,1,0,0,0,0,0,1,0,0],
-                    [1,0,1,1,1,0,1,0,1,0,0,1,0,1,0,1,1,1,0,1,0],
-                    [1,0,1,1,1,0,1,0,0,1,0,0,1,0,0,1,1,1,0,1,0],
-                    [1,0,0,0,0,0,1,0,1,0,0,0,1,0,0,0,0,0,1,0,0],
-                    [1,1,1,1,1,1,1,0,1,0,1,0,1,1,1,1,1,1,1,0,0],
-                    [0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0],
-                    [1,0,1,1,0,1,1,0,0,0,1,0,1,1,0,1,0,1,0,1,0],
-                    [0,1,0,1,0,0,0,1,0,1,0,0,0,0,1,0,1,0,1,0,1],
-                    [1,0,1,0,1,0,1,0,1,0,1,1,0,1,0,1,0,0,1,0,0],
-                    [0,0,0,0,0,0,0,0,1,1,0,0,1,0,0,0,1,0,1,0,1],
-                    [1,1,1,1,1,1,1,0,0,0,1,0,0,1,0,1,1,1,1,0,0],
-                    [1,0,0,0,0,0,1,0,1,0,0,1,1,0,1,0,1,0,0,0,1],
-                    [1,0,1,1,1,0,1,0,0,0,1,0,0,1,0,1,0,1,0,1,0],
-                    [1,0,1,1,1,0,1,0,1,0,0,1,0,0,1,0,1,0,0,0,1],
-                    [1,0,0,0,0,0,1,0,0,1,0,0,1,0,0,1,0,0,1,0,0],
-                    [1,1,1,1,1,1,1,0,0,0,0,1,0,1,0,1,0,1,0,1,0],
-                  ].map((row, r) => row.map((cell, c) => cell ? (
-                    <rect key={`${r}-${c}`} x={c} y={r} width={0.85} height={0.85} fill="#a3e635" rx={0.1} />
-                  ) : null))}
-                </svg>
+              <div className="shrink-0 bg-white rounded-xl p-2 shadow-xs flex items-center justify-center">
+                <QRCode
+                  value={resolvedInviteLink}
+                  size={72}
+                  fgColor="#000000"
+                  bgColor="#ffffff"
+                  margin={1}
+                  className="rounded-md"
+                />
               </div>
               <div>
                 <p className="text-sm font-bold text-white">Сканируй и присоединяйся</p>

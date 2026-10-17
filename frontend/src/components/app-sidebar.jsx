@@ -47,6 +47,7 @@ export function AppSidebar() {
   const { open } = useSidebar();
   const { user, isAuthenticated, logout } = useAuth();
   const [communities, setCommunities] = useState([]);
+  const [sharingBaseUrl, setSharingBaseUrl] = useState("");
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isJoinOpen, setIsJoinOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
@@ -66,26 +67,30 @@ export function AppSidebar() {
               all.map((c) => ({
                 id: c.id,
                 name: c.name,
+                invite_code: c.invite_code,
                 url: `/community/${c.id}`,
               }))
             );
-            return;
           }
         }
-        // Запасной запрос в /api/bootstrap
+        // Запрос в /api/bootstrap для получения LAN-адреса и дефолтных сообществ
         return fetch("/api/bootstrap", { headers })
           .then((res) => (res.ok ? res.json() : null))
           .then((bData) => {
+            if (bData?.sharing?.base_url) {
+              setSharingBaseUrl(bData.sharing.base_url);
+            }
             if (bData?.communities?.length > 0) {
-              setCommunities(
-                bData.communities.map((c) => ({
-                  id: c.id,
-                  name: c.name,
-                  url: `/community/${c.id}`,
-                }))
+              setCommunities((prev) =>
+                prev.length > 0
+                  ? prev
+                  : bData.communities.map((c) => ({
+                      id: c.id,
+                      name: c.name,
+                      invite_code: c.invite_code,
+                      url: `/community/${c.id}`,
+                    }))
               );
-            } else {
-              setCommunities([]);
             }
           });
       })
@@ -456,6 +461,21 @@ export function AppSidebar() {
         type="invite"
         open={isInviteOpen}
         onOpenChange={setIsInviteOpen}
+        communityCode={
+          (communities.find((c) =>
+            window.location.pathname.startsWith(`/community/${c.id}`)
+          ) || communities[0])?.invite_code || "ZVUK26"
+        }
+        serverAddress={
+          sharingBaseUrl || (typeof window !== "undefined" ? window.location.origin : "")
+        }
+        inviteLink={`${
+          sharingBaseUrl || (typeof window !== "undefined" ? window.location.origin : "")
+        }/?invite=${
+          (communities.find((c) =>
+            window.location.pathname.startsWith(`/community/${c.id}`)
+          ) || communities[0])?.invite_code || "ZVUK26"
+        }`}
       />
     </Sidebar>
   );

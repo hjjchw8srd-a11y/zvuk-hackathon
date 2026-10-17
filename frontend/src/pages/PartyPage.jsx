@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { audioService } from "@/lib/audioService";
+import { QRCode } from "@/components/QRCode.jsx";
 
 const STUDIO_TRACKS = [
   {
@@ -129,9 +130,9 @@ function fmtTimer(seconds) {
 
 export function PartyPage() {
   const { id: routeRoomId } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const { user: authUser } = useAuth();
+  const { user: _authUser } = useAuth();
 
   const [activePartyId, setActivePartyId] = useState(null);
   const [partyState, setPartyState] = useState(null);
@@ -145,12 +146,26 @@ export function PartyPage() {
   // Modals
   const [modalAddTrack, setModalAddTrack] = useState(false);
   const [modalStop, setModalStop] = useState(false);
+  const [modalInvite, setModalInvite] = useState(false);
+  const [serverAddress, setServerAddress] = useState("");
   const [addTrackTab, setAddTrackTab] = useState("library"); // library | custom
   const [trackSearch, setTrackSearch] = useState("");
   const [selectedGenre, setSelectedGenre] = useState("Все жанры");
   const [customTitle, setCustomTitle] = useState("");
   const [customArtist, setCustomArtist] = useState("");
   const [customGenre, setCustomGenre] = useState("Поп");
+
+  // Fetch LAN IP from bootstrap for invites
+  useEffect(() => {
+    fetch("/api/bootstrap")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((bData) => {
+        if (bData?.sharing?.base_url) {
+          setServerAddress(bData.sharing.base_url);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Local timers & UI
   const [elapsedTimer, setElapsedTimer] = useState(0);
@@ -459,26 +474,29 @@ export function PartyPage() {
     }
   };
 
-  // Copy Invite link for friends
+  const effectiveServer = serverAddress || (typeof window !== "undefined" ? window.location.origin : "");
+  const partyInviteUrl = `${effectiveServer}/party?join=${partyState?.party?.invite_code || ""}`;
+
+  // Copy Invite link for friends and open QR modal
   const handleCopyInvite = async () => {
     if (!partyState?.party?.invite_code) return;
-    const url = `${window.location.origin}/party?join=${partyState.party.invite_code}`;
+    setModalInvite(true);
     try {
       if (navigator?.clipboard?.writeText) {
-        await navigator.clipboard.writeText(url);
+        await navigator.clipboard.writeText(partyInviteUrl);
       } else {
         const textarea = document.createElement("textarea");
-        textarea.value = url;
+        textarea.value = partyInviteUrl;
         document.body.appendChild(textarea);
         textarea.select();
         document.execCommand("copy");
         document.body.removeChild(textarea);
       }
       setIsLinkCopied(true);
-      showToast("🔗 Ссылка-инвайт скопирована! Отправьте её друзьям.");
+      showToast("🔗 Ссылка-инвайт скопирована! QR-код готов.");
       setTimeout(() => setIsLinkCopied(false), 3000);
     } catch {
-      showToast("Не удалось скопировать ссылку");
+      showToast("Открываем окно с инвайтом");
     }
   };
 
@@ -1414,6 +1432,76 @@ export function PartyPage() {
             >
               Завершить
             </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══ МОДАЛКА: ПРИГЛАШЕНИЕ НА ВЕЧЕРИНКУ С QR ═════════════════════════ */}
+      <Dialog open={modalInvite} onOpenChange={setModalInvite}>
+        <DialogContent className="sm:max-w-[440px] bg-[#171717] border-[#262626] text-white">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#2b1f17] border border-[#4d331e] text-amber-400">
+            <Share2 size={18} />
+          </div>
+          <DialogTitle className="text-xl font-bold text-white m-0">
+            Позвать друзей на тусовку
+          </DialogTitle>
+          <DialogDescription className="text-xs text-neutral-400 m-0">
+            Покажи QR на экране или поделись ссылкой — друзья сразу подключатся к вечеринке.
+          </DialogDescription>
+          <div className="flex flex-col gap-4 mt-2">
+            <div>
+              <label className="block text-xs font-semibold text-neutral-400 mb-1.5">
+                Ссылка для входа
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  readOnly
+                  value={partyInviteUrl}
+                  className="flex-1 bg-[#1c1c1c] border border-[#262626] rounded-xl px-3 py-2 text-xs text-amber-400 font-mono outline-none"
+                />
+                <button
+                  onClick={() => {
+                    navigator.clipboard?.writeText(partyInviteUrl);
+                    setIsLinkCopied(true);
+                    setTimeout(() => setIsLinkCopied(false), 2000);
+                    showToast("Ссылка скопирована!");
+                  }}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-950/40 border border-amber-800/40 text-amber-300 text-xs font-semibold hover:bg-amber-900/40 transition-colors shrink-0 cursor-pointer"
+                >
+                  {isLinkCopied ? <Check size={14} className="text-[#a3e635]" /> : <Copy size={14} />}
+                  {isLinkCopied ? "Скопировано" : "Копировать"}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-neutral-400 mb-1.5">
+                Код тусовки
+              </label>
+              <div className="flex items-center justify-between bg-[#1f1915] border border-[#38281d] rounded-xl px-4 py-2.5">
+                <span className="text-xl font-black tracking-widest text-white">
+                  {partyState?.party?.invite_code || "PARTY"}
+                </span>
+                <span className="text-xs text-neutral-400">Введи при входе</span>
+              </div>
+            </div>
+            <div className="rounded-xl bg-neutral-900/60 border border-[#262626] p-4 flex items-center gap-4">
+              <div className="shrink-0 bg-white rounded-xl p-2 shadow-xs flex items-center justify-center">
+                <QRCode
+                  value={partyInviteUrl}
+                  size={76}
+                  fgColor="#000000"
+                  bgColor="#ffffff"
+                  margin={1}
+                  className="rounded-md"
+                />
+              </div>
+              <div>
+                <p className="text-sm font-bold text-white">Сканируй и залетай</p>
+                <p className="text-xs text-neutral-400 mt-1 leading-snug">
+                  Наведи камеру телефона на QR-код для мгновенного входа.
+                </p>
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Share2, Copy, Check, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { QRCode } from "./QRCode.jsx";
 
 export function Popup({
   type = "create", // "create" | "create-community" | "join" | "join-by-code" | "invite" | "invite-friends" | "custom"
@@ -23,7 +24,7 @@ export function Popup({
   badge,
   icon,
   communityCode = "RITM2026",
-  serverAddress = "http://127.0.0.1:5173",
+  serverAddress,
   inviteLink,
   className,
 }) {
@@ -31,7 +32,9 @@ export function Popup({
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
 
-  const resolvedInviteLink = inviteLink || `${serverAddress}/?join=${communityCode}`;
+  const defaultHost = typeof window !== "undefined" ? window.location.origin : "http://127.0.0.1:5173";
+  const effectiveServerAddress = serverAddress || defaultHost;
+  const resolvedInviteLink = inviteLink || `${effectiveServerAddress}/?invite=${communityCode}`;
 
   const copyToClipboard = (text, copyType) => {
     if (navigator?.clipboard?.writeText) {
@@ -253,7 +256,7 @@ export function Popup({
                 Адрес сервера (для телефона — IP ноутбука)
               </label>
               <div className="rounded-xl bg-[#202521] border border-[#2a342c] px-3.5 py-2.5 text-sm text-neutral-300 font-mono">
-                {serverAddress}
+                {effectiveServerAddress}
               </div>
             </div>
 
@@ -283,11 +286,14 @@ export function Popup({
 
             {/* Баннер "Сканируй и голосуй" */}
             <div className="rounded-2xl bg-[#e3f7b8] p-3.5 flex items-center gap-3.5 text-neutral-900 mt-1">
-              <div className="shrink-0 rounded-xl bg-white p-1.5 shadow-xs">
-                <img
-                  src="/icons/qr-code.svg"
-                  alt="QR Code"
-                  className="h-16 w-16"
+              <div className="shrink-0 rounded-xl bg-white p-1.5 shadow-xs flex items-center justify-center">
+                <QRCode
+                  value={resolvedInviteLink}
+                  size={72}
+                  fgColor="#000000"
+                  bgColor="#ffffff"
+                  margin={1}
+                  className="rounded-md"
                 />
               </div>
               <div>
