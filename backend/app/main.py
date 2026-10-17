@@ -36,6 +36,13 @@ async def startup_event():
     except Exception:
         pass
     try:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE rooms ADD COLUMN IF NOT EXISTS party_is_active BOOLEAN NOT NULL DEFAULT false;"))
+            conn.execute(text("ALTER TABLE rooms ADD COLUMN IF NOT EXISTS party_name VARCHAR(150);"))
+            conn.execute(text("ALTER TABLE rooms ADD COLUMN IF NOT EXISTS party_started_at TIMESTAMPTZ;"))
+    except Exception as e:
+        print("Party DDL check:", e)
+    try:
         from app.seed import seed_database
         seed_database()
     except Exception as e:

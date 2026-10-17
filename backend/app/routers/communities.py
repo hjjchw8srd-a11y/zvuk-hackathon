@@ -209,6 +209,10 @@ class CompleteRequest(BaseModel):
     queue_version: int = Field(ge=0)
 
 
+class PartyStartRequest(BaseModel):
+    name: str = Field(default="Вечеринка", max_length=150)
+
+
 def _clean(value: str, limit: int) -> str:
     return re.sub(r"\s+", " ", value or "").strip()[:limit]
 
@@ -599,6 +603,12 @@ def _community_state(db: Session, room: Room, membership: RoomMember, user: User
             "owner_id": room.owner_id,
             "created_at": room.created_at,
             "role": membership.role.value,
+        },
+        "party": {
+            "is_active": room.party_is_active,
+            "name": room.party_name or "Вечеринка",
+            "started_at": room.party_started_at.isoformat() if room.party_started_at else None,
+            "duration_seconds": int((datetime.now(timezone.utc) - room.party_started_at).total_seconds()) if (room.party_is_active and room.party_started_at) else 0,
         },
         "playback": {
             "current_track_id": playing_track["id"] if playing_track else None,
@@ -1112,3 +1122,123 @@ def update_member_role(
     db.commit()
     manager.notify_room(room_id, action="role_updated", extra={"member_id": str(member_id), "role": target.role.value})
     return {"role": target.role.value}
+
+
+@router.post("/communities/{room_id}/party/start")
+def start_party(
+    room_id: uuid.UUID,
+    payload: PartyStartRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    membership = _member(db, room_id, user.id)
+    if not _moderator(membership):
+        raise HTTPException(status_code=403, detail="Запустить вечеринку может только администратор")
+    room = db.scalar(select(Room).where(Room.id == room_id).with_for_update())
+    room.party_is_active = True
+    room.party_name = payload.name.strip() or "Вечеринка"
+    room.party_started_at = datetime.now(timezone.utc)
+    try:
+        create_playlist_round(db, room_id, user.id, manual=True)
+    except Exception:
+        pass
+    db.commit()
+    started_iso = room.party_started_at.isoformat()
+    manager.notify_room(
+        room_id,
+        action="party_status_changed",
+        extra={
+            "type": "party_status_changed",
+            "is_active": True,
+            "name": room.party_name,
+            "started_at": started_iso,
+        },
+    )
+    return {
+        "ok": True,
+        "is_active": True,
+        "name": room.party_name,
+        "started_at": started_iso,
+    }
+
+
+@router.post("/communities/{room_id}/party/stop")
+def stop_party(
+    room_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    membership = _member(db, room_id, user.id)
+    if not _moderator(membership):
+        raise HTTPException(status_code=403, detail="Остановить вечеринку может только администратор")
+    room = db.scalar(select(Room).where(Room.id == room_id).with_for_update())
+    room.party_is_active = False
+    db.commit()
+    manager.notify_room(
+        room_id,
+        action="party_status_changed",
+        extra={
+            "type": "party_status_changed",
+            "is_active": False,
+            "name": room.party_name,
+            "started_at": room.party_started_at.isoformat() if room.party_started_at else None,
+        },
+    )
+    return {
+        "ok": True,
+        "is_active": False,
+        "name": room.party_name,
+    }
+
+
+@router.get("/communities/{room_id}/party/status")
+def party_status(
+    room_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    room = _room(db, room_id)
+    membership = _member(db, room_id, user.id)
+    state = _community_state(db, room, membership, user)
+
+    tracks = [t for t in state["tracks"] if t["status"] == "approved"]
+    banger = tracks[0] if tracks else None
+
+    user_scores: dict[uuid.UUID, dict] = {}
+    for m in state["members"]:
+        user_scores[m["id"]] = {
+            "id": str(m["id"]),
+            "name": m["display_name"],
+            "display_name": m["display_name"],
+            "avatar": (m["display_name"] or "У")[:2].upper(),
+            "total_score": 0,
+            "tracks_count": 0,
+        }
+    for t in tracks:
+        c_id = t["created_by"]
+        if c_id in user_scores:
+            user_scores[c_id]["total_score"] += int(t["vote_score"] or 0)
+            user_scores[c_id]["tracks_count"] += 1
+
+    sorted_hitmakers = sorted(
+        user_scores.values(),
+        key=lambda u: (-u["total_score"], -u["tracks_count"], u["name"] or ""),
+    )
+    hitmaker = sorted_hitmakers[0] if sorted_hitmakers and (sorted_hitmakers[0]["tracks_count"] > 0 or sorted_hitmakers[0]["total_score"] > 0) else (sorted_hitmakers[0] if sorted_hitmakers else None)
+
+    duration = 0
+    if room.party_is_active and room.party_started_at:
+        duration = int((datetime.now(timezone.utc) - room.party_started_at).total_seconds())
+
+    return {
+        "is_active": room.party_is_active,
+        "name": room.party_name or "Вечеринка",
+        "started_at": room.party_started_at.isoformat() if room.party_started_at else None,
+        "duration_seconds": duration,
+        "members_count": state["stats"]["members"],
+        "banger_track": banger,
+        "hitmaker": hitmaker,
+        "tracks": tracks,
+        "playback": state["playback"],
+        "can_moderate": _moderator(membership),
+    }

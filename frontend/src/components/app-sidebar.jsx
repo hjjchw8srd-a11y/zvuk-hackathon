@@ -27,6 +27,7 @@ import {
   ArrowRight,
   LogOut,
   User as UserIcon,
+  Flame,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,7 @@ import { useAuth } from "@/lib/auth";
 const items = [
   { title: "Главная", url: "/", icon: Home },
   { title: "Плейлист", url: "/playlist", icon: ListMusic },
+  { title: "Вечеринка", url: "/party", icon: Flame, badge: "LIVE" },
   { title: "Медиатека", url: "/library", icon: Library },
   { title: "Избранное", url: "/favorites", icon: Heart },
 ];
@@ -245,9 +247,17 @@ export function AppSidebar() {
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
-                    <Link to={item.url} title={item.title}>
-                      <item.icon />
-                      {open && <span>{item.title}</span>}
+                    <Link to={item.url} title={item.title} className="flex items-center justify-between w-full">
+                      <div className="flex items-center gap-2">
+                        <item.icon className={item.badge ? "text-orange-400" : ""} />
+                        {open && <span>{item.title}</span>}
+                      </div>
+                      {open && item.badge && (
+                        <span className="text-[10px] font-black px-1.5 py-0.2 rounded-full bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1 animate-pulse">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                          {item.badge}
+                        </span>
+                      )}
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

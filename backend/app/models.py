@@ -121,6 +121,13 @@ class Room(Base):
     is_active: Mapped[bool] = mapped_column(
         server_default=text("true"), nullable=False
     )
+    party_is_active: Mapped[bool] = mapped_column(
+        server_default=text("false"), default=False, nullable=False
+    )
+    party_name: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    party_started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     avatar_url: Mapped[str | None] = mapped_column(String(500))
     external_link: Mapped[str | None] = mapped_column(String(500))
     queue_version: Mapped[int] = mapped_column(

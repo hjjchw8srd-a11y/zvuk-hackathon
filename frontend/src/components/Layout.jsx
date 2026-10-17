@@ -9,7 +9,9 @@ export default function Layout({ children }) {
   const isPlaylistPage =
     location.pathname === "/playlist" ||
     location.pathname.startsWith("/playlist/") ||
-    location.pathname.startsWith("/community");
+    location.pathname.startsWith("/community") ||
+    location.pathname === "/party" ||
+    location.pathname.startsWith("/party");
 
   return (
     <SidebarProvider className="bg-[#121212] text-white">
