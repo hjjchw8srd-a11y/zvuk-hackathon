@@ -13,18 +13,18 @@
 Что происходит под капотом от нажатия пальцем на экран до обновления у всех участников:
 
 1. **Интерфейс и оптимистичный UI (Клиент А):**
-   - Пользователь нажимает кнопку `▲` в [`PlaylistPage.jsx`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/frontend/src/pages/PlaylistPage.jsx) или [`MainPage.jsx`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/frontend/src/pages/MainPage.jsx).
+   - Пользователь нажимает кнопку `▲` в [`PlaylistPage.jsx`](frontend/src/pages/PlaylistPage.jsx) или [`MainPage.jsx`](frontend/src/pages/MainPage.jsx).
    - Фронтенд мгновенно применяет **Optimistic Update**: локальный счетчик увеличивается, кнопка подсвечивается зеленым цветом (`#a3e635`), треки сортируются в памяти. Пользователь видит нулевую задержку интерфейса (0 ms latency).
 2. **Асинхронный сетевой запрос (HTTP POST):**
    - Фронтенд отправляет запрос: `POST /api/communities/{room_id}/tracks/{track_id}/vote` с телом `{"value": 1}`.
    - В заголовке передается JWT-токен: `Authorization: Bearer <token>`.
    - В dev-режиме Vite Proxy перехватывает путь `^/api/` и передает его на бэкенд `http://localhost:8000`.
 3. **Безопасность и валидация (FastAPI Gateway):**
-   - Роутер [`backend/app/routers/communities.py`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/backend/app/routers/communities.py) перехватывает вызов.
+   - Роутер [`backend/app/routers/communities.py`](backend/app/routers/communities.py) перехватывает вызов.
    - Зависимость `Depends(get_current_user)` декодирует JWT через `pyjwt`, валидирует подпись и срок жизни, загружая объект пользователя `User` из базы.
    - Pydantic-модель `VoteRequest` проверяет тип данных входного значения (`value: int`).
 4. **Транзакционная бизнес-логика (Service Layer & Locks):**
-   - Вызывается функция `cast_vote()` из [`backend/app/services/playlist.py`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/backend/app/services/playlist.py).
+   - Вызывается функция `cast_vote()` из [`backend/app/services/playlist.py`](backend/app/services/playlist.py).
    - Накладывается **пессимистическая блокировка** `select ... with_for_update()` на строку комнаты (`Room`) и элемент очереди (`QueueItem`). Это исключает race condition при одновременном голосовании тысяч пользователей.
    - Проверяется членство пользователя в сообществе (`_require_member()`) и активность текущего раунда ротации (`RoundStatus.ACTIVE`).
 5. **Сохранение в БД и гарантия целостности (PostgreSQL ACID):**
@@ -109,61 +109,61 @@
 ## 2. Разбор каждой используемой технологии
 
 ### 2.1. FastAPI (Python 3.12)
-* **Где живет:** [`backend/app/main.py`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/backend/app/main.py), [`backend/app/routers/`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/backend/app/routers/), [`backend/app/services/`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/backend/app/services/).
+* **Где живет:** [`backend/app/main.py`](backend/app/main.py), [`backend/app/routers/`](backend/app/routers/), [`backend/app/services/`](backend/app/services/).
 * **Принцип работы «на пальцах»:** Современный фреймворк на базе стандарта ASGI. Входящий HTTP-запрос преобразуется в типизированные структуры Pydantic, проходит через цепочку внедрения зависимостей (`Depends`) для проверки токена и получения сессии БД, а синхронные функции базы данных запускаются в оптимизированном системном пуле потоков Starlette.
 * **Почему именно он, а не альтернативы:**
   * **Против Django:** Django избыточен (тяжелый ORM, ненужная админка, медленный старт). Для WebSockets в Django нужен сторонний стек (Django Channels + Redis + Daphne), в то время как FastAPI поддерживает WebSocket нативно прямо из коробки в одном процессе.
   * **Против Flask:** Flask синхронен по умолчанию и не имеет встроенной системы строгой типизации данных. В FastAPI валидация через Pydantic v2 написана на Rust и работает в 5–10 раз быстрее любого кода на Python.
 
 ### 2.2. React 19 + React Router v7
-* **Где живет:** [`frontend/src/App.jsx`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/frontend/src/App.jsx), [`frontend/src/pages/`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/frontend/src/pages/), [`frontend/src/components/`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/frontend/src/components/).
+* **Где живет:** [`frontend/src/App.jsx`](frontend/src/App.jsx), [`frontend/src/pages/`](frontend/src/pages/), [`frontend/src/components/`](frontend/src/components/).
 * **Принцип работы:** Клиентское Single Page Application (SPA). React строит дерево Virtual DOM и точечно перерисовывает только изменившиеся ноды при поступлении новых данных. Клиентский роутер переключает экраны без перезагрузки HTML-документа, сохраняя глобальное состояние аудио-плеера.
 * **Почему именно он, а не альтернативы:**
   * **Против Next.js:** Next.js ориентирован на Server-Side Rendering (SSR). В нашем приложении играет непрерывная музыка: при переходах между страницами SSR-приложение рискует пересоздавать layout или вызывать расхождение гидратации (hydration mismatch) с аудио-контекстом браузера. React SPA дает 100% контроль над жизненным циклом singleton-плеера.
   * **Против Vue/Angular:** Экосистема React предоставляет самые гибкие headless-компоненты интерфейсов (Radix UI) и максимальную производительность React 19 Compiler.
 
 ### 2.3. Vite 7 + @tailwindcss/vite
-* **Где живет:** [`frontend/vite.config.js`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/frontend/vite.config.js), [`frontend/package.json`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/frontend/package.json).
+* **Где живет:** [`frontend/vite.config.js`](frontend/vite.config.js), [`frontend/package.json`](frontend/package.json).
 * **Принцип работы:** Инструмент сборки на базе нативных ES-модулей (ESM) в браузере. В dev-режиме код не бандлится целиком — каждый файл транслируется на лету через быстрый esbuild (написан на Go). Сборка production выполняется через Rollup.
 * **Почему именно он, а не Create-React-App (CRA):**
   * CRA официально объявлен устаревшим (deprecated), использует тяжелый Webpack 4/5 и тратит десятки секунд на перезапуск. Vite запускается за 150 миллисекунд и поддерживает Hot Module Replacement (HMR) за пару миллисекунд.
   * Встроенный прокси-сервер Vite с параметром `ws: true` позволяет фронтенду и бэкенду бесшовно общаться по WebSocket на одном порту `5173` без проблем с CORS.
 
 ### 2.4. PostgreSQL 16
-* **Где живет:** [`compose.yaml`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/compose.yaml), [`backend/app/models.py`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/backend/app/models.py), каталог [`sql/`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/sql/).
+* **Где живет:** [`compose.yaml`](compose.yaml), [`backend/app/models.py`](backend/app/models.py), каталог [`sql/`](sql/).
 * **Принцип работы:** Промышленная реляционная СУБД с полной поддержкой стандарта ACID. Использует изоляцию транзакций Read Committed, блокировки строк `FOR UPDATE`, поддержку частичных индексов (Partial Indexes) и генерацию UUID на уровне ядра.
 * **Почему именно она, а не SQLite или MongoDB:**
   * **Против SQLite:** SQLite блокирует всю базу данных целиком при записи (`database is locked`). В многопользовательском плеере, где десятки людей одновременно ставят лайки и загружают треки, SQLite моментально встанет в очередь и упадет по таймауту.
   * **Против MongoDB:** Документные базы не гарантируют атомарность перекрестных связей. В нашей системе критически важно, чтобы один пользователь не мог поставить 2 голоса за один трек (`UNIQUE(queue_item_id, user_id)`) и чтобы в раунде не могло играть два трека одновременно (`UNIQUE INDEX WHERE state = 'playing'`).
 
 ### 2.5. SQLAlchemy 2.0 + Alembic
-* **Где живет:** [`backend/app/database.py`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/backend/app/database.py), [`backend/app/models.py`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/backend/app/models.py), [`backend/alembic/`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/backend/alembic/).
+* **Где живет:** [`backend/app/database.py`](backend/app/database.py), [`backend/app/models.py`](backend/app/models.py), [`backend/alembic/`](backend/alembic/).
 * **Принцип работы:** Высокопроизводительный ORM-инструмент и Data Mapper. Версия 2.0 использует строгий синтаксис `select()`, явно управляет транзакциями и защищает от любых SQL-инъекций за счет обязательной параметризации всех аргументов. Alembic обеспечивает версионирование схемы БД.
 * **Почему именно он:** Дает возможность писать сложные аналитические запросы (агрегация истории воспроизведений, подсчет голосов по дням, группировка авторов) без костылей «сырого» SQL, сохраняя строгую типизацию сущностей.
 
 ### 2.6. WebSockets + Fallback Polling (Связка реального времени)
 * **Где живет:**
-  * Бэкенд: [`backend/app/routers/communities.py`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/backend/app/routers/communities.py) (`ConnectionManager`, `@router.websocket("/ws/communities/{room_id}")`).
-  * Фронтенд: [`frontend/src/pages/PlaylistPage.jsx`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/frontend/src/pages/PlaylistPage.jsx), [`frontend/src/pages/MainPage.jsx`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/frontend/src/pages/MainPage.jsx).
+  * Бэкенд: [`backend/app/routers/communities.py`](backend/app/routers/communities.py) (`ConnectionManager`, `@router.websocket("/ws/communities/{room_id}")`).
+  * Фронтенд: [`frontend/src/pages/PlaylistPage.jsx`](frontend/src/pages/PlaylistPage.jsx), [`frontend/src/pages/MainPage.jsx`](frontend/src/pages/MainPage.jsx).
 * **Принцип работы:** После стандартного HTTP Handshake соединение переключается (Upgrade) на постоянный TCP-сокет. Бэкенд держит сокет в словаре `active_connections[room_id]`. При любом изменении данных сервер рассылает JSON-событие.
 * **Почему дуэт WebSocket + Polling:**
   * Чистый WebSocket может «засыпать» на мобильных устройствах iOS/Android при блокировке экрана или переходе между сотовыми вышками (Silent Disconnect).
   * Поэтому мы внедрили гибридную схему: WebSocket дает **мгновенную реакцию (<20 ms)** при активной сессии, а фоновый легкий опрос **(Polling каждые 2.5 секунды)** гарантирует, что даже при разрыве связи состояние синхронизируется на 100%.
 
 ### 2.7. HTML5 Audio API + Web Audio API Synthesizer
-* **Где живет:** [`frontend/src/lib/audioService.js`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/frontend/src/lib/audioService.js).
+* **Где живет:** [`frontend/src/lib/audioService.js`](frontend/src/lib/audioService.js).
 * **Принцип работы:** Двухуровневый аудио-движок на базе паттерна Singleton.
   * Уровень 1: Потоковое воспроизведение реальных MP3-файлов через нативный объект `new Audio()`.
   * Уровень 2 (Fallback): Если файл не найден или сеть заблокирована, активируется встроенный синтезатор звука на Web Audio API (`AudioContext`, `OscillatorNode`, `GainNode`), генерирующий гармонические мелодии procedural sound.
 * **Почему вынесен в Singleton:** Плеер живет вне дерева React-компонентов. Пользователь может свободно гулять по сайту (смотреть свои сообщества, библиотеку, настройки), а музыка воспроизводится без пауз и заиканий.
 
 ### 2.8. Mutagen & Проверка бинарных сигнатур
-* **Где живет:** [`backend/app/routers/communities.py`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/backend/app/routers/communities.py) (`_read_valid_audio`, `_detect_audio_format`).
+* **Где живет:** [`backend/app/routers/communities.py`](backend/app/routers/communities.py) (`_read_valid_audio`, `_detect_audio_format`).
 * **Принцип работы:** Низкоуровневый анализ байтов (Magic Bytes): проверка RIFF/WAVE, OggS, fLaC, ftyp (m4a) и парсинг sync-фреймов MPEG (`0xFFE0`). Библиотека `mutagen` читает заголовки файла и определяет точную длительность до десятых долей секунды без распаковки аудио в память.
 * **Зачем жюри это знать:** Защита от RCE и XSS. Пользователь не может загрузить исполняемый файл `.exe` или скрипт `.php`, переименованный в `.mp3`, а также блокируются вредоносные HLS-плейлисты (`.m3u8`).
 
 ### 2.9. Docker & Docker Compose
-* **Где живет:** [`compose.yaml`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/compose.yaml), [`backend/Dockerfile`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/backend/Dockerfile).
+* **Где живет:** [`compose.yaml`](compose.yaml), [`backend/Dockerfile`](backend/Dockerfile).
 * **Принцип работы:** Изоляция среды исполнения. PostgreSQL и FastAPI собираются в легковесные контейнеры на базе Alpine и Debian-slim. Контейнеры общаются через изолированную внутреннюю сеть Docker bridge, а данные сохраняются в именованные тома (`postgres_data`, `uploads_data`).
 
 ---
@@ -226,7 +226,7 @@ zvuk-hackathon/
 
 #### Механика 1: Архитектура непрерывного аудио-плеера
 * **Проблема:** В обычных React-приложениях плеер монтируется внутри страницы. При переходе на другой маршрут (например, из `/playlist` в `/library`) компонент размонтируется, аудиопоток прерывается.
-* **Решение в коде:** Класс `SoundEngine` в [`audioService.js`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/frontend/src/lib/audioService.js) является **модульным синглтоном**. Он инстанциируется один раз при загрузке бандла и живет вне жизненного цикла React.
+* **Решение в коде:** Класс `SoundEngine` в [`audioService.js`](frontend/src/lib/audioService.js) является **модульным синглтоном**. Он инстанциируется один раз при загрузке бандла и живет вне жизненного цикла React.
 * **Автоматическое переключение треков:**
   1. В объект `new Audio()` вешается слушатель события `ended`.
   2. По окончании трека вызывается коллбэк `this.onEnded()`.
@@ -236,7 +236,7 @@ zvuk-hackathon/
 
 #### Механика 2: Алгоритм честного ранжирования треков (Fair Score)
 * **Проблема:** «Эффект толпы» и накрутка от одного плодовитого автора. Если один автор загрузит 10 треков и попросит друзей проголосовать, весь эфир забьется его песнями.
-* **Решение в коде ([`services/playlist.py`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/backend/app/services/playlist.py)):**
+* **Решение в коде ([`services/playlist.py`](backend/app/services/playlist.py)):**
   1. Базовый рейтинг вычисляется как чистая разница голосов:
      $$\text{score} = \text{upvotes} - \text{downvotes}$$
   2. Запрашивается количество треков данного автора, которые уже звучали в эфире сегодня: `played_by_author`.
@@ -255,7 +255,7 @@ zvuk-hackathon/
 * **Сессионная защита:** Все запросы авторизуются криптографическим токеном JWT (алгоритм HS256) с привязкой к конкретному `user_id`.
 
 #### Механика 4: Realtime-синхронизация без лагов
-* В роутере [`communities.py`](file:///home/m0dern/xakaton_zvuk/zvuk-hackathon/backend/app/routers/communities.py) инициализирован `ConnectionManager`.
+* В роутере [`communities.py`](backend/app/routers/communities.py) инициализирован `ConnectionManager`.
 * Он хранит потокобезопасную мапу подключений `active_connections: dict[str, set[WebSocket]]`.
 * При наступлении любого мутирующего события (`track_added`, `vote`, `moderation`, `playback`, `rotation`):
   ```python

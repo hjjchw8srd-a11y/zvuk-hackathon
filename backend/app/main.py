@@ -35,6 +35,11 @@ async def startup_event():
         manager.set_loop(asyncio.get_running_loop())
     except Exception:
         pass
+    try:
+        from app.seed import seed_database
+        seed_database()
+    except Exception as e:
+        print("Seed check:", e)
 
 
 @app.websocket("/ws/communities/{room_id}")
