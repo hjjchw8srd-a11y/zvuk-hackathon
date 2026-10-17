@@ -449,6 +449,43 @@ export function PlaylistPage() {
     return () => clearInterval(id);
   }, []);
 
+  // Плеер: методы управления воспроизведением
+  const playTrack = useCallback((trackId) => {
+    setPlayer((p) => p.trackId === trackId
+      ? { ...p, playing: !p.playing }
+      : { trackId, playing: true, progress: 0, elapsed: 0 });
+  }, []);
+
+  const togglePlay = () => {
+    if (!player.trackId && tracks.length > 0) playTrack(sortedTracks(tracks)[0].id);
+    else setPlayer((p) => ({ ...p, playing: !p.playing }));
+  };
+
+  const playerNext = useCallback(() => {
+    const s = sortedTracks(tracks);
+    if (!s.length) return;
+    const idx = s.findIndex((t) => t.id === player.trackId);
+    const next = s[(idx + 1) % s.length];
+    setPlayer({ trackId: next.id, playing: true, progress: 0, elapsed: 0 });
+  }, [tracks, player.trackId]);
+
+  const playerPrev = useCallback(() => {
+    const s = sortedTracks(tracks);
+    if (!s.length) return;
+    const idx = s.findIndex((t) => t.id === player.trackId);
+    const prev = s[(idx - 1 + s.length) % s.length];
+    setPlayer({ trackId: prev.id, playing: true, progress: 0, elapsed: 0 });
+  }, [tracks, player.trackId]);
+
+  const seekPlayer = (e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+    setPlayer((p) => ({ ...p, progress: pct, elapsed: (pct / 100) * 240 }));
+  };
+
+  const currentTrack = tracks.find((t) => t.id === player.trackId) || null;
+  const fmtTime = (sec) => `${Math.floor(sec / 60)}:${fmt2(Math.floor(sec % 60))}`;
+
   // Симуляция воспроизведения прогресс-бара
   useEffect(() => {
     const id = setInterval(() => {
@@ -527,43 +564,6 @@ export function PlaylistPage() {
     },
     [addHistory, tracks, currentRoomId]
   );
-
-  // Плеер
-  const playTrack = useCallback((trackId) => {
-    setPlayer((p) => p.trackId === trackId
-      ? { ...p, playing: !p.playing }
-      : { trackId, playing: true, progress: 0, elapsed: 0 });
-  }, []);
-
-  const togglePlay = () => {
-    if (!player.trackId && tracks.length > 0) playTrack(sortedTracks(tracks)[0].id);
-    else setPlayer((p) => ({ ...p, playing: !p.playing }));
-  };
-
-  const playerNext = useCallback(() => {
-    const s = sortedTracks(tracks);
-    if (!s.length) return;
-    const idx = s.findIndex((t) => t.id === player.trackId);
-    const next = s[(idx + 1) % s.length];
-    setPlayer({ trackId: next.id, playing: true, progress: 0, elapsed: 0 });
-  }, [tracks, player.trackId]);
-
-  const playerPrev = useCallback(() => {
-    const s = sortedTracks(tracks);
-    if (!s.length) return;
-    const idx = s.findIndex((t) => t.id === player.trackId);
-    const prev = s[(idx - 1 + s.length) % s.length];
-    setPlayer({ trackId: prev.id, playing: true, progress: 0, elapsed: 0 });
-  }, [tracks, player.trackId]);
-
-  const seekPlayer = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pct = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-    setPlayer((p) => ({ ...p, progress: pct, elapsed: (pct / 100) * 240 }));
-  };
-
-  const currentTrack = tracks.find((t) => t.id === player.trackId) || null;
-  const fmtTime = (sec) => `${Math.floor(sec / 60)}:${fmt2(Math.floor(sec % 60))}`;
 
   // Модерация
   const deleteTrack = async (trackId) => {
