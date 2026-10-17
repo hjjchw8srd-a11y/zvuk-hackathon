@@ -36,7 +36,7 @@ def seed_database():
             user = User(
                 email=demo_email,
                 password_hash=hash_password("DemoPassword123!"),
-                display_name="Студент ВШЭ",
+                display_name="Студент СПбГУ",
                 avatar_url="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150",
             )
             db.add(user)
