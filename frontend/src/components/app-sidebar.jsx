@@ -450,36 +450,6 @@ export function AppSidebar() {
             </div>
           </div>
         </button>
-
-        {/* Пользователь и кнопка выхода */}
-        {user && (
-          <div className="w-full mt-2 pt-2 border-t border-neutral-800/80 flex items-center justify-between px-1">
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold text-xs">
-                {(user.display_name || user.username || "U")[0].toUpperCase()}
-              </div>
-              {open && (
-                <div className="min-w-0">
-                  <div className="text-xs font-semibold text-white truncate">
-                    {user.display_name || user.username}
-                  </div>
-                  <div className="text-[10px] text-zinc-400 truncate">
-                    {user.is_superuser ? "🛡️ SuperAdmin" : (user.username ? `@${user.username}` : user.email)}
-                  </div>
-                </div>
-              )}
-            </div>
-            {open && (
-              <button
-                onClick={logout}
-                title="Выйти из аккаунта"
-                className="p-1.5 rounded-lg hover:bg-neutral-800 text-neutral-400 hover:text-red-400 transition-colors"
-              >
-                <LogOut className="h-4 w-4" />
-              </button>
-            )}
-          </div>
-        )}
       </SidebarFooter>
 
       {/* Единый компонент всплывающих окон (popup) */}

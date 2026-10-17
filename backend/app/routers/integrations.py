@@ -27,16 +27,13 @@ class ConfigureStreamerBotRequest(BaseModel):
 
 
 @router.get("/status")
-def streamerbot_status(user: User = Depends(get_current_user)):
-    _ = user
+def streamerbot_status():
     return streamerbot_bridge.snapshot()
 
 
 @router.post("/config")
 async def update_streamerbot_config(
     payload: ConfigureStreamerBotRequest,
-    user: User = Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
     from app.config import settings
     if payload.room_code is not None:
@@ -54,24 +51,18 @@ async def update_streamerbot_config(
 @router.post("/simulate")
 def simulate_streamerbot_command(
     payload: SimulateCommandRequest,
-    user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     room = _configured_room(db)
     if room is None:
         raise HTTPException(status_code=409, detail="Сначала настройте комнату Streamer.bot")
-    
-    membership = db.get(RoomMember, (room.id, user.id))
-    if membership is None:
-        db.add(RoomMember(room_id=room.id, user_id=user.id, role=MemberRole.MEMBER))
-        db.commit()
 
     result = handle_chat_command(
         db,
         text=payload.text,
-        twitch_user_id=f"test-{user.id}",
-        user_login=user.username or user.display_name or "viewer",
-        user_name=user.display_name or "Viewer",
+        twitch_user_id="test-viewer",
+        user_login="test_viewer",
+        user_name="Test Viewer",
     )
     return {
         "action": result.action,
