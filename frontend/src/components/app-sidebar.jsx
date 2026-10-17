@@ -467,10 +467,18 @@ export function AppSidebar() {
           ) || communities[0])?.invite_code || "ZVUK26"
         }
         serverAddress={
-          sharingBaseUrl || (typeof window !== "undefined" ? window.location.origin : "")
+          typeof window !== "undefined" &&
+          window.location.hostname !== "localhost" &&
+          window.location.hostname !== "127.0.0.1"
+            ? window.location.origin
+            : sharingBaseUrl || (typeof window !== "undefined" ? window.location.origin : "")
         }
         inviteLink={`${
-          sharingBaseUrl || (typeof window !== "undefined" ? window.location.origin : "")
+          typeof window !== "undefined" &&
+          window.location.hostname !== "localhost" &&
+          window.location.hostname !== "127.0.0.1"
+            ? window.location.origin
+            : sharingBaseUrl || (typeof window !== "undefined" ? window.location.origin : "")
         }/?invite=${
           (communities.find((c) =>
             window.location.pathname.startsWith(`/community/${c.id}`)

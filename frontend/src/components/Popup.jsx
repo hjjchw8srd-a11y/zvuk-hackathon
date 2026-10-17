@@ -33,8 +33,14 @@ export function Popup({
   const [copiedLink, setCopiedLink] = useState(false);
 
   const defaultHost = typeof window !== "undefined" ? window.location.origin : "http://127.0.0.1:5173";
-  const effectiveServerAddress = serverAddress || defaultHost;
-  const resolvedInviteLink = inviteLink || `${effectiveServerAddress}/?invite=${communityCode}`;
+  const isPublicDomain =
+    typeof window !== "undefined" &&
+    window.location.hostname !== "localhost" &&
+    window.location.hostname !== "127.0.0.1";
+  const effectiveServerAddress = isPublicDomain ? window.location.origin : (serverAddress || defaultHost);
+  const resolvedInviteLink = isPublicDomain
+    ? `${window.location.origin}/?invite=${communityCode}`
+    : (inviteLink || `${effectiveServerAddress}/?invite=${communityCode}`);
 
   const copyToClipboard = (text, copyType) => {
     if (navigator?.clipboard?.writeText) {

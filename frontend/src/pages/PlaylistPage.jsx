@@ -1141,7 +1141,12 @@ export function PlaylistPage() {
     setModalAdd(false);
   };
 
-  const effectiveHost = serverAddress || (typeof window !== "undefined" ? window.location.origin : "");
+  const effectiveHost =
+    typeof window !== "undefined" &&
+    window.location.hostname !== "localhost" &&
+    window.location.hostname !== "127.0.0.1"
+      ? window.location.origin
+      : serverAddress || (typeof window !== "undefined" ? window.location.origin : "");
   const currentInviteCode = playlist.inviteCode || "ZVUK26";
   const resolvedInviteLink = `${effectiveHost}/?invite=${currentInviteCode}`;
 
