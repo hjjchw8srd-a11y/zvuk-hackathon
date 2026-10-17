@@ -80,11 +80,20 @@ class SoundEngine {
     this.isPlaying = true;
     this.started = performance.now();
 
-    const streamUrl = audioUrl || track.audio_url || (track.id && track.room_id && track.source_type === "upload"
+    const fileMap = {
+      bustin: "/audio/bustin_loose.mp3",
+      funk90: "/audio/90_seconds_of_funk.mp3",
+      cents5: "/audio/5_cents_back.mp3",
+      fallingsky: "/audio/falling_sky.mp3",
+    };
+    const key = track.library_key || track.key;
+    const directFile = fileMap[key];
+
+    const streamUrl = directFile || audioUrl || track.audio_url || (track.id && track.room_id && track.source_type === "upload"
       ? `/api/communities/${track.room_id}/tracks/${track.id}/audio`
       : null);
 
-    if (streamUrl && track.source_type === "upload") {
+    if (streamUrl) {
       const audio = new Audio();
       audio.preload = "auto";
       audio.src = streamUrl;

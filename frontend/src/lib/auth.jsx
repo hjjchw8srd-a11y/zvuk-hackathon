@@ -10,7 +10,17 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const token = localStorage.getItem("token");
     if (!token) {
-      setLoading(false);
+      // Инициализируем сессию через /api/bootstrap, чтобы получить JWT
+      fetch("/api/bootstrap")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.access_token) {
+            localStorage.setItem("token", data.access_token);
+            if (data.user) setUser(data.user);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoading(false));
       return;
     }
 
@@ -27,8 +37,22 @@ export function AuthProvider({ children }) {
         setUser(userData);
       })
       .catch(() => {
-        localStorage.removeItem("token");
-        setUser(null);
+        // Если старый токен протух, запрашиваем свежий гостевой
+        fetch("/api/bootstrap")
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data?.access_token) {
+              localStorage.setItem("token", data.access_token);
+              if (data.user) setUser(data.user);
+            } else {
+              localStorage.removeItem("token");
+              setUser(null);
+            }
+          })
+          .catch(() => {
+            localStorage.removeItem("token");
+            setUser(null);
+          });
       })
       .finally(() => {
         setLoading(false);

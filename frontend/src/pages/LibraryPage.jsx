@@ -24,6 +24,50 @@ import { audioService } from "@/lib/audioService";
 
 const STUDIO_TRACKS = [
   {
+    key: "bustin",
+    title: "Bustin Loose With Lead",
+    artist: "Audionautix",
+    genre: "Рок",
+    duration: "2:08",
+    duration_seconds: 128,
+    color: "#e05638",
+    gradient: "from-red-600 via-orange-600 to-amber-700",
+    description: "Драйвовый классический гитарный рок с мощными риффами и энергичным соло.",
+  },
+  {
+    key: "funk90",
+    title: "90 Seconds Of Funk",
+    artist: "Audionautix",
+    genre: "Фанк",
+    duration: "1:31",
+    duration_seconds: 91,
+    color: "#f59e0b",
+    gradient: "from-amber-500 via-yellow-600 to-orange-700",
+    description: "Качающий фанковый ритм с пружинистым слэп-басом и ярким грувом.",
+  },
+  {
+    key: "cents5",
+    title: "5 Cents Back",
+    artist: "Audionautix",
+    genre: "Рок",
+    duration: "1:54",
+    duration_seconds: 114,
+    color: "#3b82f6",
+    gradient: "from-blue-600 via-indigo-600 to-cyan-700",
+    description: "Блюз-роковый ритм с глубоким звучанием электрогитары и плотным басом.",
+  },
+  {
+    key: "fallingsky",
+    title: "Falling Sky",
+    artist: "Audionautix",
+    genre: "Хаус",
+    duration: "4:12",
+    duration_seconds: 252,
+    color: "#8b5cf6",
+    gradient: "from-purple-600 via-violet-700 to-pink-700",
+    description: "Клубный атмосферный хаус с глубокой бочкой, синтами и танцевальным настроением.",
+  },
+  {
     key: "dawn",
     title: "Первые лучи",
     artist: "Volna Studio",
@@ -91,7 +135,7 @@ const STUDIO_TRACKS = [
   },
 ];
 
-const GENRES = ["Все жанры", "Эмбиент", "Лоу-фай", "Электроника", "Инди", "Синтвейв", "Чилаут"];
+const GENRES = ["Все жанры", "Рок", "Фанк", "Хаус", "Эмбиент", "Лоу-фай", "Электроника", "Инди", "Синтвейв", "Чилаут"];
 
 export function LibraryPage() {
   const [search, setSearch] = useState("");

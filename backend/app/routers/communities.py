@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.auth import get_current_user
+from app.auth import create_access_token, get_current_user
 from app.config import BACKEND_DIR, settings
 from app.database import get_db
 from app.network import frontend_base_url
@@ -65,6 +65,10 @@ AUDIO_MIME_TYPES = {
 }
 
 LIBRARY = [
+    {"key": "bustin", "title": "Bustin Loose With Lead", "artist": "Audionautix", "genre": "Рок", "duration_seconds": 128, "color": "#e05638", "file": "bustin_loose.mp3"},
+    {"key": "funk90", "title": "90 Seconds Of Funk", "artist": "Audionautix", "genre": "Фанк", "duration_seconds": 91, "color": "#f59e0b", "file": "90_seconds_of_funk.mp3"},
+    {"key": "cents5", "title": "5 Cents Back", "artist": "Audionautix", "genre": "Блюз-рок", "duration_seconds": 114, "color": "#3b82f6", "file": "5_cents_back.mp3"},
+    {"key": "fallingsky", "title": "Falling Sky", "artist": "Audionautix", "genre": "Хаус", "duration_seconds": 252, "color": "#8b5cf6", "file": "falling_sky.mp3"},
     {"key": "dawn", "title": "Первые лучи", "artist": "Volna Studio", "genre": "Эмбиент", "duration_seconds": 48, "color": "#f4b782"},
     {"key": "city", "title": "После пар", "artist": "Volna Studio", "genre": "Лоу-фай", "duration_seconds": 56, "color": "#b2a1df"},
     {"key": "orbit", "title": "Орбита", "artist": "Volna Studio", "genre": "Электроника", "duration_seconds": 52, "color": "#80cdd3"},
@@ -132,6 +136,13 @@ def _uploads_dir() -> Path:
 def _member(db: Session, room_id: uuid.UUID, user_id: uuid.UUID) -> RoomMember:
     membership = db.get(RoomMember, (room_id, user_id))
     if membership is None:
+        room = db.get(Room, room_id)
+        if room is not None and room.is_active:
+            membership = RoomMember(room_id=room_id, user_id=user_id, role=MemberRole.MEMBER)
+            db.add(membership)
+            db.commit()
+            db.refresh(membership)
+            return membership
         raise HTTPException(status_code=403, detail="Нет доступа к сообществу")
     return membership
 
@@ -218,6 +229,7 @@ def bootstrap(
     ).all()
     return {
         "user": user,
+        "access_token": create_access_token(user.id),
         "communities": [
             {
                 "id": room.id,
@@ -283,6 +295,8 @@ def create_community(
         "name": room.name,
         "avatar_url": room.avatar_url,
         "external_link": room.external_link,
+        "invite_code": room.invite_code,
+        "access_token": create_access_token(user.id),
     }
 
 
@@ -334,7 +348,11 @@ def join_community(
     if db.get(RoomMember, (room.id, user.id)) is None:
         db.add(RoomMember(room_id=room.id, user_id=user.id))
         db.commit()
-    return {"id": room.id}
+    return {
+        "id": room.id,
+        "name": room.name,
+        "access_token": create_access_token(user.id),
+    }
 
 
 def _community_state(db: Session, room: Room, membership: RoomMember, user: User):

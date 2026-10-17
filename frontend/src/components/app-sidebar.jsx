@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Sidebar,
   SidebarHeader,
@@ -44,15 +44,13 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const { open } = useSidebar();
   const { user, isAuthenticated, logout } = useAuth();
-  const [communities, setCommunities] = useState([
-    { id: 1, name: "Мое сообщество", url: "/playlist" },
-  ]);
+  const [communities, setCommunities] = useState([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isJoinOpen, setIsJoinOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
 
   // Загрузка реальных сообществ из бэкенда
-  useEffect(() => {
+  const fetchCommunities = useCallback(() => {
     const token = localStorage.getItem("token");
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
@@ -84,11 +82,21 @@ export function AppSidebar() {
                   url: `/community/${c.id}`,
                 }))
               );
+            } else {
+              setCommunities([]);
             }
           });
       })
       .catch(() => {});
-  }, [user]);
+  }, []);
+
+  useEffect(() => {
+    fetchCommunities();
+    window.addEventListener("communities_updated", fetchCommunities);
+    return () => {
+      window.removeEventListener("communities_updated", fetchCommunities);
+    };
+  }, [fetchCommunities, user]);
 
   const handleCreateCommunity = async (communityName) => {
     try {
@@ -104,29 +112,16 @@ export function AppSidebar() {
       });
       if (res.ok) {
         const data = await res.json();
-        setCommunities((prev) => [
-          ...prev,
-          {
-            id: data.id,
-            name: communityName,
-            url: `/community/${data.id}`,
-          },
-        ]);
+        if (data.access_token) {
+          localStorage.setItem("token", data.access_token);
+        }
+        window.dispatchEvent(new Event("communities_updated"));
         navigate(`/community/${data.id}`);
         return;
       }
     } catch {}
 
-    const newId = Date.now();
-    setCommunities((prev) => [
-      ...prev,
-      {
-        id: newId,
-        name: communityName,
-        url: `/community/${newId}`,
-      },
-    ]);
-    navigate(`/community/${newId}`);
+    navigate("/playlist");
   };
 
   const handleRemoveCommunity = (idToRemove) => {
@@ -147,29 +142,15 @@ export function AppSidebar() {
       });
       if (res.ok) {
         const data = await res.json();
-        setCommunities((prev) => [
-          ...prev,
-          {
-            id: data.id,
-            name: `Сообщество (${inviteCode})`,
-            url: `/community/${data.id}`,
-          },
-        ]);
+        if (data.access_token) {
+          localStorage.setItem("token", data.access_token);
+        }
+        window.dispatchEvent(new Event("communities_updated"));
         navigate(`/community/${data.id}`);
         return;
       }
     } catch {}
-
-    const newId = Date.now();
-    setCommunities((prev) => [
-      ...prev,
-      {
-        id: newId,
-        name: `Сообщество (${inviteCode})`,
-        url: `/community/${newId}`,
-      },
-    ]);
-    navigate(`/community/${newId}`);
+    navigate("/playlist");
   };
 
   return (

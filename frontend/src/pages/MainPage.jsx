@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Sparkles,
@@ -18,6 +18,7 @@ import {
   KeyRound,
   ShieldCheck,
   Zap,
+  Music,
 } from "lucide-react";
 import { Popup } from "@/components/Popup";
 import { cn } from "@/lib/utils";
@@ -28,13 +29,42 @@ export function MainPage() {
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isJoinOpen, setIsJoinOpen] = useState(false);
   const [upvoted, setUpvoted] = useState(false);
-  const [votesCount, setVotesCount] = useState(14);
+  const [votesCount, setVotesCount] = useState(0);
   const [activeCommunity, setActiveCommunity] = useState(null);
+  const [communityTracks, setCommunityTracks] = useState([]);
   const [isPlayingPreview, setIsPlayingPreview] = useState(false);
 
-  useEffect(() => {
-    document.title = "ритм. — Совместные плейлисты в реальном времени";
+  const fetchActiveCommunityTracks = useCallback((commId) => {
+    if (!commId) return;
+    const token = localStorage.getItem("token");
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
+    fetch(`/api/communities/${commId}`, { headers })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.community) {
+          setActiveCommunity((prev) => ({
+            ...prev,
+            ...data.community,
+            member_count: data.stats?.members || data.members?.length || prev?.member_count || 1,
+          }));
+        }
+        if (Array.isArray(data?.tracks)) {
+          const approved = data.tracks.filter((t) => t.status === "approved" || !t.status);
+          setCommunityTracks(approved);
+          if (approved.length > 0) {
+            setVotesCount(approved[0].vote_score ?? approved[0].score ?? 0);
+            setUpvoted(approved[0].my_vote === 1);
+          } else {
+            setVotesCount(0);
+            setUpvoted(false);
+          }
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const loadInitialCommunity = useCallback(() => {
     const token = localStorage.getItem("token");
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
@@ -44,45 +74,66 @@ export function MainPage() {
         const first = data?.created?.[0] || data?.joined?.[0];
         if (first) {
           setActiveCommunity(first);
+          fetchActiveCommunityTracks(first.id);
         } else {
           fetch("/api/bootstrap", { headers })
             .then((r) => (r.ok ? r.json() : null))
             .then((bData) => {
               if (bData?.communities?.length > 0) {
-                setActiveCommunity(bData.communities[0]);
+                const bFirst = bData.communities[0];
+                setActiveCommunity(bFirst);
+                fetchActiveCommunityTracks(bFirst.id);
               }
             });
         }
       })
       .catch(() => {});
+  }, [fetchActiveCommunityTracks]);
 
+  useEffect(() => {
+    document.title = "ритм. — Совместные плейлисты в реальном времени";
+    loadInitialCommunity();
+
+    window.addEventListener("communities_updated", loadInitialCommunity);
+    return () => {
+      window.removeEventListener("communities_updated", loadInitialCommunity);
+    };
+  }, [loadInitialCommunity]);
+
+  const currentTrack = communityTracks[0] || null;
+
+  useEffect(() => {
     const unsubscribe = audioService.subscribe((state) => {
-      setIsPlayingPreview(state.isPlaying && state.track?.id === "preview-1");
+      setIsPlayingPreview(state.isPlaying && state.track?.id === currentTrack?.id);
     });
     return () => unsubscribe();
-  }, []);
+  }, [currentTrack]);
 
-  const handleVote = () => {
-    if (!upvoted) {
-      setVotesCount((prev) => prev + 1);
-      setUpvoted(true);
-    } else {
-      setVotesCount((prev) => prev - 1);
-      setUpvoted(false);
-    }
+  const handleVote = async () => {
+    if (!currentTrack || !activeCommunity) return;
+    const nextVote = upvoted ? 0 : 1;
+    setUpvoted(!upvoted);
+    setVotesCount((prev) => (nextVote === 1 ? prev + 1 : prev - 1));
+
+    try {
+      const token = localStorage.getItem("token");
+      await fetch(`/api/communities/${activeCommunity.id}/tracks/${currentTrack.id}/vote`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ value: nextVote }),
+      });
+    } catch {}
   };
 
   const handleTogglePreviewPlay = () => {
+    if (!currentTrack) return;
     if (isPlayingPreview) {
       audioService.pause();
     } else {
-      audioService.play({
-        id: "preview-1",
-        title: "Midnight City",
-        artist: "M83",
-        library_key: "city",
-        duration_seconds: 60,
-      });
+      audioService.play(currentTrack);
     }
   };
 
@@ -100,6 +151,10 @@ export function MainPage() {
       });
       if (res.ok) {
         const data = await res.json();
+        if (data.access_token) {
+          localStorage.setItem("token", data.access_token);
+        }
+        window.dispatchEvent(new Event("communities_updated"));
         navigate(`/community/${data.id}`);
         return;
       }
@@ -121,6 +176,10 @@ export function MainPage() {
       });
       if (res.ok) {
         const data = await res.json();
+        if (data.access_token) {
+          localStorage.setItem("token", data.access_token);
+        }
+        window.dispatchEvent(new Event("communities_updated"));
         navigate(`/community/${data.id}`);
         return;
       }
@@ -204,79 +263,113 @@ export function MainPage() {
                     <span className="relative inline-flex rounded-full h-3 w-3 bg-[#a3e635]" />
                   </span>
                   <span className="text-xs font-bold uppercase tracking-wider text-[#a3e635]">
-                    Сейчас в эфире • {activeCommunity ? `Комната «${activeCommunity.name}»` : "Демо-комната «Пятничный Вайб»"}
+                    Сейчас в эфире • {activeCommunity ? `Комната «${activeCommunity.name}»` : "Ваш плейлист"}
                   </span>
                 </div>
                 <div className="flex items-center gap-1.5 text-xs text-neutral-400 bg-neutral-900/80 px-2.5 py-1 rounded-full border border-neutral-800">
                   <Users className="h-3.5 w-3.5 text-[#a3e635]" />
-                  <span>{activeCommunity?.member_count || 8} участников</span>
+                  <span>{activeCommunity?.member_count || 1} участников</span>
                 </div>
               </div>
 
-              {/* Текущий трек с живым воспроизведением */}
-              <div className="flex items-center gap-4 bg-neutral-900/60 p-3.5 rounded-xl border border-neutral-800/80 mb-4">
-                <button
-                  type="button"
-                  onClick={handleTogglePreviewPlay}
-                  className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-[#293d2c] text-[#a3e635] overflow-hidden cursor-pointer group"
-                  title={isPlayingPreview ? "Поставить на паузу" : "Послушать отрывок"}
-                >
-                  <Headphones className="h-7 w-7" />
-                  <div className={cn(
-                    "absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity",
-                    isPlayingPreview ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                  )}>
-                    {isPlayingPreview ? (
-                      <Pause className="h-6 w-6 text-[#a3e635] fill-[#a3e635]" />
+              {/* Если в сообществе нет треков */}
+              {communityTracks.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-8 px-4 text-center rounded-xl bg-neutral-900/40 border border-neutral-800/60 my-2">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#233525] border border-[#2e4730] text-[#a3e635] mb-3">
+                    <Music className="h-6 w-6" />
+                  </div>
+                  <h4 className="text-base font-bold text-white mb-1">
+                    В этом сообществе пока нет треков
+                  </h4>
+                  <p className="text-xs text-neutral-400 max-w-sm mb-4 leading-relaxed">
+                    Будьте первым, кто предложит трек в совместную очередь комнаты!
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => navigate(activeCommunity ? `/community/${activeCommunity.id}` : "/playlist")}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#a3e635] text-black text-xs font-bold hover:bg-[#b5f442] transition-all cursor-pointer shadow-md shadow-[#a3e635]/15"
+                  >
+                    <Plus className="h-4 w-4 stroke-[2.5]" />
+                    <span>Предложить трек в плейлист</span>
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Текущий трек с живым воспроизведением */}
+                  <div className="flex items-center gap-4 bg-neutral-900/60 p-3.5 rounded-xl border border-neutral-800/80 mb-4">
+                    <button
+                      type="button"
+                      onClick={handleTogglePreviewPlay}
+                      className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-lg bg-[#293d2c] text-[#a3e635] overflow-hidden cursor-pointer group"
+                      title={isPlayingPreview ? "Поставить на паузу" : "Послушать"}
+                    >
+                      <Headphones className="h-7 w-7" />
+                      <div
+                        className={cn(
+                          "absolute inset-0 bg-black/40 flex items-center justify-center transition-opacity",
+                          isPlayingPreview ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                        )}
+                      >
+                        {isPlayingPreview ? (
+                          <Pause className="h-6 w-6 text-[#a3e635] fill-[#a3e635]" />
+                        ) : (
+                          <Play className="h-6 w-6 text-white fill-white" />
+                        )}
+                      </div>
+                    </button>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-bold text-white truncate">
+                        {currentTrack?.title}
+                      </div>
+                      <div className="text-xs text-neutral-400 truncate">
+                        {currentTrack?.artist} • Добавил {currentTrack?.contributor || currentTrack?.created_by_name || "@участник"}
+                      </div>
+                      <div className="w-full bg-neutral-800 h-1.5 rounded-full mt-2.5 overflow-hidden">
+                        <div className="bg-[#a3e635] h-full w-2/3 rounded-full animate-pulse" />
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleVote}
+                      className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-lg border transition-all cursor-pointer ${
+                        upvoted
+                          ? "bg-[#233525] border-[#2e4730] text-[#a3e635]"
+                          : "bg-neutral-800 border-neutral-700 text-neutral-300 hover:text-white"
+                      }`}
+                      title="Поднять в очереди"
+                    >
+                      <Flame className={`h-4 w-4 ${upvoted ? "fill-[#a3e635]" : ""}`} />
+                      <span className="text-xs font-bold mt-0.5">{votesCount}</span>
+                    </button>
+                  </div>
+
+                  {/* Следующие треки */}
+                  <div className="space-y-2">
+                    <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">
+                      Следующие в очереди
+                    </div>
+                    {communityTracks.length > 1 ? (
+                      communityTracks.slice(1, 3).map((track, i) => (
+                        <div
+                          key={track.id}
+                          className="flex items-center justify-between text-xs py-2 px-3 rounded-lg bg-neutral-900/40 text-neutral-300"
+                        >
+                          <span className="truncate">
+                            {i + 1}. {track.artist} — {track.title}
+                          </span>
+                          <span className="text-[#a3e635] font-semibold flex items-center gap-1">
+                            <Flame className="h-3 w-3" /> {track.vote_score ?? track.score ?? 0} голосов
+                          </span>
+                        </div>
+                      ))
                     ) : (
-                      <Play className="h-6 w-6 text-white fill-white" />
+                      <div className="text-xs text-neutral-500 py-1 px-1">
+                        Больше треков в очереди нет — добавьте следующий!
+                      </div>
                     )}
                   </div>
-                </button>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-bold text-white truncate">
-                    Midnight City
-                  </div>
-                  <div className="text-xs text-neutral-400 truncate">
-                    M83 • Добавил Alexey
-                  </div>
-                  <div className="w-full bg-neutral-800 h-1.5 rounded-full mt-2.5 overflow-hidden">
-                    <div className="bg-[#a3e635] h-full w-2/3 rounded-full animate-pulse" />
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleVote}
-                  className={`flex flex-col items-center justify-center px-3 py-1.5 rounded-lg border transition-all cursor-pointer ${
-                    upvoted
-                      ? "bg-[#233525] border-[#2e4730] text-[#a3e635]"
-                      : "bg-neutral-800 border-neutral-700 text-neutral-300 hover:text-white"
-                  }`}
-                  title="Поднять в очереди"
-                >
-                  <Flame className={`h-4 w-4 ${upvoted ? "fill-[#a3e635]" : ""}`} />
-                  <span className="text-xs font-bold mt-0.5">{votesCount}</span>
-                </button>
-              </div>
-
-              {/* Следующие треки */}
-              <div className="space-y-2">
-                <div className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">
-                  Следующие в очереди
-                </div>
-                <div className="flex items-center justify-between text-xs py-2 px-3 rounded-lg bg-neutral-900/40 text-neutral-300">
-                  <span className="truncate">1. Daft Punk — Get Lucky</span>
-                  <span className="text-[#a3e635] font-semibold flex items-center gap-1">
-                    <Flame className="h-3 w-3" /> 11 голосов
-                  </span>
-                </div>
-                <div className="flex items-center justify-between text-xs py-2 px-3 rounded-lg bg-neutral-900/20 text-neutral-400">
-                  <span className="truncate">2. The Weeknd — Blinding Lights</span>
-                  <span className="text-neutral-500 font-semibold flex items-center gap-1">
-                    <Flame className="h-3 w-3" /> 7 голосов
-                  </span>
-                </div>
-              </div>
+                </>
+              )}
 
               {/* Кнопка быстрого перехода в комнату */}
               <div className="mt-4 pt-3 border-t border-neutral-800/80 flex flex-col sm:flex-row items-center justify-between gap-3">

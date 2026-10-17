@@ -40,6 +40,10 @@ const INITIAL_TRACKS = [];
 const INITIAL_MOD_QUEUE = [];
 
 const LIBRARY_TRACKS = [
+  { id: "bustin", key: "bustin", title: "Bustin Loose With Lead", artist: "Audionautix", genre: "Рок", duration: "2:08", duration_seconds: 128, gradient: "from-red-600 to-amber-700" },
+  { id: "funk90", key: "funk90", title: "90 Seconds Of Funk", artist: "Audionautix", genre: "Фанк", duration: "1:31", duration_seconds: 91, gradient: "from-amber-500 to-orange-700" },
+  { id: "cents5", key: "cents5", title: "5 Cents Back", artist: "Audionautix", genre: "Рок", duration: "1:54", duration_seconds: 114, gradient: "from-blue-600 to-cyan-700" },
+  { id: "fallingsky", key: "fallingsky", title: "Falling Sky", artist: "Audionautix", genre: "Хаус", duration: "4:12", duration_seconds: 252, gradient: "from-purple-600 to-pink-700" },
   { id: "dawn", key: "dawn", title: "Первые лучи", artist: "Volna Studio", genre: "Эмбиент", duration: "0:48", duration_seconds: 48, gradient: "from-amber-500 to-orange-700" },
   { id: "city", key: "city", title: "После пар", artist: "Volna Studio", genre: "Лоу-фай", duration: "0:56", duration_seconds: 56, gradient: "from-violet-600 to-indigo-800" },
   { id: "orbit", key: "orbit", title: "Орбита", artist: "Volna Studio", genre: "Электроника", duration: "0:52", duration_seconds: 52, gradient: "from-cyan-500 to-blue-700" },
@@ -391,9 +395,9 @@ export function PlaylistPage() {
                 ? `${Math.floor(t.duration_seconds / 60)}:${fmt2(t.duration_seconds % 60)}`
                 : "0:45",
               duration_seconds: t.duration_seconds || 45,
-              proposer: t.created_by_name ? `@${t.created_by_name}` : "@volna",
-              votes: t.score ?? 0,
-              userVote: t.user_vote ?? 0,
+              proposer: t.contributor ? `@${t.contributor}` : (t.created_by_name ? `@${t.created_by_name}` : "@volna"),
+              votes: t.vote_score ?? t.score ?? 0,
+              userVote: t.my_vote ?? t.user_vote ?? 0,
               gradient: grads[idx % grads.length],
               prevRank: idx + 1,
             }));
@@ -412,10 +416,14 @@ export function PlaylistPage() {
                 ? `${Math.floor(t.duration_seconds / 60)}:${fmt2(t.duration_seconds % 60)}`
                 : "0:45",
               duration_seconds: t.duration_seconds || 45,
-              proposer: t.created_by_name ? `@${t.created_by_name}` : "@участник",
+              proposer: t.contributor ? `@${t.contributor}` : (t.created_by_name ? `@${t.created_by_name}` : "@участник"),
               gradient: grads[(idx + 2) % grads.length],
             }));
-          setModQueue(pending);
+          setModQueue((prev) => {
+            const serverIds = new Set(pending.map((p) => p.id));
+            const localUnsynced = prev.filter((p) => typeof p.id === "number" && !serverIds.has(p.id));
+            return [...pending, ...localUnsynced];
+          });
         }
       })
       .catch(() => {});
@@ -608,25 +616,56 @@ export function PlaylistPage() {
     ]);
   }, []);
 
-  // Голосование
+  // Голосование: максимум можно добавить или убрать один балл (+1 или -1)
   const handleVote = useCallback(
     async (trackId, dir) => {
       const targetTrack = tracks.find((t) => t.id === trackId);
-      const isCancel = targetTrack?.userVote === dir;
-      const nextVoteValue = isCancel ? 0 : dir;
+      if (!targetTrack) return;
+
+      const currentVote = targetTrack.userVote || 0;
+      let nextVote = 0;
+      let delta = 0;
+
+      if (dir === 1) {
+        if (currentVote === 1) {
+          nextVote = 0;
+          delta = -1;
+          addHistory("unvote", targetTrack);
+        } else if (currentVote === -1) {
+          nextVote = 0;
+          delta = 1;
+          addHistory("unvote", targetTrack);
+        } else {
+          nextVote = 1;
+          delta = 1;
+          addHistory("vote_up", targetTrack);
+        }
+      } else if (dir === -1) {
+        if (currentVote === -1) {
+          nextVote = 0;
+          delta = 1;
+          addHistory("unvote", targetTrack);
+        } else if (currentVote === 1) {
+          nextVote = 0;
+          delta = -1;
+          addHistory("unvote", targetTrack);
+        } else {
+          nextVote = -1;
+          delta = -1;
+          addHistory("vote_down", targetTrack);
+        }
+      }
 
       setTracks((prev) => {
         const s = sortedTracks(prev);
         const withPrev = prev.map((t) => ({ ...t, prevRank: s.findIndex((x) => x.id === t.id) + 1 }));
         return withPrev.map((t) => {
           if (t.id !== trackId) return t;
-          if (t.userVote === dir) {
-            addHistory("unvote", t, 0);
-            return { ...t, votes: t.votes - dir, userVote: 0 };
-          }
-          const delta = dir - t.userVote;
-          addHistory(dir > 0 ? "vote_up" : "vote_down", t, dir);
-          return { ...t, votes: t.votes + delta, userVote: dir };
+          return {
+            ...t,
+            votes: t.votes + delta,
+            userVote: nextVote,
+          };
         });
       });
 
@@ -639,7 +678,7 @@ export function PlaylistPage() {
               "Content-Type": "application/json",
               ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
-            body: JSON.stringify({ value: nextVoteValue }),
+            body: JSON.stringify({ value: nextVote }),
           });
         } catch {}
       }
@@ -788,7 +827,13 @@ export function PlaylistPage() {
         if (res.ok) {
           const resData = await res.json();
           fetchCommunityData(currentRoomId);
-          showToast(resData.status === "approved" ? `✓ «${t.title}» добавлен в плейлист` : `«${t.title}» отправлен на модерацию`);
+          if (resData.status === "approved") {
+            showToast(`✓ «${t.title}» добавлен в плейлист`);
+            setActiveTab("queue");
+          } else {
+            showToast(`«${t.title}» отправлен на модерацию`);
+            setActiveTab("moderation");
+          }
           setModalAdd(false);
           return;
         } else {
@@ -804,6 +849,7 @@ export function PlaylistPage() {
     setModQueue((prev) => [...prev, newTrack]);
     addHistory("propose", newTrack, 0);
     showToast(`«${t.title}» отправлен на модерацию`);
+    setActiveTab("moderation");
     setModalAdd(false);
   };
 
@@ -824,7 +870,13 @@ export function PlaylistPage() {
         if (res.ok) {
           const resData = await res.json();
           fetchCommunityData(currentRoomId);
-          showToast(resData.status === "approved" ? `✓ «${uploadTitle.trim()}» добавлен в плейлист` : `«${uploadTitle.trim()}» отправлен на модерацию`);
+          if (resData.status === "approved") {
+            showToast(`✓ «${uploadTitle.trim()}» добавлен в плейлист`);
+            setActiveTab("queue");
+          } else {
+            showToast(`«${uploadTitle.trim()}» отправлен на модерацию`);
+            setActiveTab("moderation");
+          }
           setUploadTitle(""); setUploadArtist(""); setChosenFile(null);
           setModalAdd(false);
           return;
@@ -838,6 +890,7 @@ export function PlaylistPage() {
     setModQueue((prev) => [...prev, newTrack]);
     addHistory("propose", newTrack, 0);
     showToast(`«${uploadTitle.trim()}» отправлен на модерацию`);
+    setActiveTab("moderation");
     setUploadTitle(""); setUploadArtist(""); setChosenFile(null);
     setModalAdd(false);
   };
