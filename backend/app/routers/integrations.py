@@ -36,10 +36,12 @@ def streamerbot_status(user: User = Depends(get_current_user)):
 async def update_streamerbot_config(
     payload: ConfigureStreamerBotRequest,
     user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     from app.config import settings
     if payload.room_code is not None:
-        settings.streamerbot_room_code = payload.room_code.strip().upper()
+        code = payload.room_code.strip().upper()
+        settings.streamerbot_room_code = code
     if payload.enabled is not None:
         settings.streamerbot_enabled = payload.enabled
         if payload.enabled:
@@ -58,15 +60,18 @@ def simulate_streamerbot_command(
     room = _configured_room(db)
     if room is None:
         raise HTTPException(status_code=409, detail="Сначала настройте комнату Streamer.bot")
+    
     membership = db.get(RoomMember, (room.id, user.id))
-    if membership is None or membership.role not in {MemberRole.OWNER, MemberRole.MODERATOR}:
-        raise HTTPException(status_code=403, detail="Тестировать интеграцию может только модератор")
+    if membership is None:
+        db.add(RoomMember(room_id=room.id, user_id=user.id, role=MemberRole.MEMBER))
+        db.commit()
+
     result = handle_chat_command(
         db,
         text=payload.text,
-        twitch_user_id="test-viewer",
-        user_login="test_viewer",
-        user_name="Test Viewer",
+        twitch_user_id=f"test-{user.id}",
+        user_login=user.username or user.display_name or "viewer",
+        user_name=user.display_name or "Viewer",
     )
     return {
         "action": result.action,
