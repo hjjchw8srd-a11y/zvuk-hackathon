@@ -1054,13 +1054,25 @@ export function PartyPage() {
                 <h2 className="text-xl font-bold text-white">Треки на вечеринке</h2>
               </div>
 
-              <button
-                onClick={() => setModalAddTrack(true)}
-                className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-orange-500 to-rose-600 hover:from-orange-400 hover:to-rose-500 text-white font-bold text-xs tracking-wide transition-all shadow-lg shadow-orange-500/20 flex items-center gap-1.5 cursor-pointer active:scale-95"
-              >
-                <Plus size={16} />
-                Добавить трек
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsStreamerBotOpen(true)}
+                  className="px-3.5 py-2.5 rounded-2xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 font-bold text-xs tracking-wide transition-all shadow-lg shadow-purple-600/10 flex items-center gap-1.5 cursor-pointer active:scale-95"
+                  title="Заказ треков из Twitch-чата"
+                >
+                  <Bot size={16} />
+                  <span>Twitch Чат</span>
+                </button>
+
+                <button
+                  onClick={() => setModalAddTrack(true)}
+                  className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-orange-500 to-rose-600 hover:from-orange-400 hover:to-rose-500 text-white font-bold text-xs tracking-wide transition-all shadow-lg shadow-orange-500/20 flex items-center gap-1.5 cursor-pointer active:scale-95"
+                >
+                  <Plus size={16} />
+                  Добавить трек
+                </button>
+              </div>
             </div>
 
             {/* Список треков */}
