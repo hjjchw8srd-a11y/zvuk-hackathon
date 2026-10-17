@@ -586,7 +586,7 @@ def _community_state(db: Session, room: Room, membership: RoomMember, user: User
                 ),
             }
         )
-    contributor_rows.sort(key=lambda row: (-row["tracks"], row["name"] or ""))
+    playing_track = next((t for t in tracks_payload if t["queue_state"] == "playing"), None)
     return {
         "community": {
             "id": room.id,
@@ -599,6 +599,10 @@ def _community_state(db: Session, room: Room, membership: RoomMember, user: User
             "owner_id": room.owner_id,
             "created_at": room.created_at,
             "role": membership.role.value,
+        },
+        "playback": {
+            "current_track_id": playing_track["id"] if playing_track else None,
+            "state": "playing" if playing_track else "paused",
         },
         "week_key": playlist_round.starts_at.date().isoformat(),
         "vote_round": playlist_round.key,
@@ -1017,7 +1021,9 @@ def play_track(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    _member(db, room_id, user.id)
+    membership = _member(db, room_id, user.id)
+    if not _moderator(membership):
+        raise HTTPException(status_code=403, detail="Управлять общим воспроизведением может только администратор")
     room = db.scalar(select(Room).where(Room.id == room_id).with_for_update())
     playlist_round = _active_round(db, room_id)
     item = _queue_item(db, playlist_round, track_id)
@@ -1029,14 +1035,40 @@ def play_track(
         current.completed_at = datetime.now(timezone.utc)
         db.flush()
     if item.state != QueueItemState.PLAYING:
+        item.version += 1
         item.state = QueueItemState.PLAYING
         item.started_at = datetime.now(timezone.utc)
         item.completed_at = None
         db.add(PlaybackHistory(queue_item_id=item.id, played_by_user_id=user.id, queue_version=item.version, started_at=item.started_at))
         room.queue_version += 1
     db.commit()
-    manager.notify_room(room_id, action="playback", extra={"track_id": str(track_id)})
-    return {"ok": True, "queue_version": item.version}
+    manager.notify_room(room_id, action="playback", extra={"track_id": str(track_id), "state": "playing"})
+    return {"ok": True, "queue_version": item.version, "track_id": str(track_id), "state": "playing"}
+
+
+@router.post("/communities/{room_id}/tracks/{track_id}/pause")
+def pause_track(
+    room_id: uuid.UUID,
+    track_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    membership = _member(db, room_id, user.id)
+    if not _moderator(membership):
+        raise HTTPException(status_code=403, detail="Управлять общим воспроизведением может только администратор")
+    room = db.scalar(select(Room).where(Room.id == room_id).with_for_update())
+    playlist_round = _active_round(db, room_id)
+    current = db.scalar(select(QueueItem).where(QueueItem.round_id == playlist_round.id, QueueItem.state == QueueItemState.PLAYING).with_for_update())
+    if current is not None:
+        current.state = QueueItemState.QUEUED
+        room.queue_version += 1
+    item = _queue_item(db, playlist_round, track_id)
+    if item is not None and item.state == QueueItemState.PLAYING:
+        item.state = QueueItemState.QUEUED
+        room.queue_version += 1
+    db.commit()
+    manager.notify_room(room_id, action="playback", extra={"track_id": str(track_id), "state": "paused"})
+    return {"ok": True, "state": "paused"}
 
 
 @router.post("/communities/{room_id}/tracks/{track_id}/complete")
@@ -1054,7 +1086,8 @@ def complete_track(
     try:
         previous, next_item = complete_current_and_play_next(db, room_id, user.id, expected_queue_item_id=item.id, expected_version=payload.queue_version)
         db.commit()
-        manager.notify_room(room_id, action="playback")
+        next_track_id = str(next_item.track_id) if next_item else None
+        manager.notify_room(room_id, action="playback", extra={"track_id": next_track_id, "state": "playing" if next_item else "paused"})
         return {"completed": previous is not None, "next_track": {"id": next_item.track_id} if next_item else None}
     except (ConflictError, ForbiddenError, NotFoundError) as error:
         db.rollback()

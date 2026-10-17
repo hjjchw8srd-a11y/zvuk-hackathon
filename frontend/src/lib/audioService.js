@@ -57,6 +57,19 @@ class SoundEngine {
     }
   }
 
+  unlock() {
+    if (this.context && this.context.state === "suspended") {
+      this.context.resume().catch(() => {});
+    }
+    if (this.audio && this.isPlaying && this.audio.paused) {
+      this.audio.play().then(() => {
+        this.stopSynth();
+      }).catch(() => {});
+    } else if (this.isPlaying && !this.audio && this.currentTrack) {
+      this.play(this.currentTrack).catch(() => {});
+    }
+  }
+
   async play(track, audioUrl = null) {
     if (!track) return;
 

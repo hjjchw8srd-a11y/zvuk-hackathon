@@ -11,7 +11,7 @@ import {
   Play, Pause, SkipBack, SkipForward, Music, Plus, Search,
   Copy, Check, Users, History, ShieldCheck, Trash2,
   CheckCircle, XCircle, Upload, ChevronUp, ChevronDown,
-  Minus, Crown, UserPlus, Image as ImageIcon, Heart,
+  Minus, Crown, UserPlus, Image as ImageIcon, Heart, Radio,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { audioService } from "@/lib/audioService";
@@ -260,10 +260,17 @@ export function PlaylistPage() {
   const [playlist, setPlaylist] = useState(DEFAULT_PLAYLIST);
   const [admins, setAdmins] = useState(DEFAULT_PLAYLIST.admins);
   const [membersList, setMembersList] = useState(MOCK_MEMBERS);
+  const [myRole, setMyRole] = useState("member");
   const [topHistory, setTopHistory] = useState(LAST_WEEK);
 
   // Права модератора: доступны владельцу или назначенным администраторам
-  const canModerate = !!(user && (playlist.creatorId === user.id || admins.includes(user.id)));
+  const canModerate = !!(
+    user &&
+    (myRole === "owner" ||
+      myRole === "moderator" ||
+      playlist.creatorId === user.id ||
+      admins.includes(user.id))
+  );
 
   // Состояние списка треков и модерации
   const [tracks, setTracks] = useState(INITIAL_TRACKS);
@@ -293,6 +300,30 @@ export function PlaylistPage() {
   // Тост-уведомления
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
+
+  const showToast = useCallback((msg) => {
+    setToast(msg);
+    clearTimeout(toastTimer.current);
+    toastTimer.current = setTimeout(() => setToast(null), 3000);
+  }, []);
+
+  const tracksRef = useRef(tracks);
+  useEffect(() => {
+    tracksRef.current = tracks;
+  }, [tracks]);
+
+  // Разблокировка AudioContext/звука при любом взаимодействии пользователя
+  useEffect(() => {
+    const unlockAudio = () => {
+      audioService.unlock();
+    };
+    window.addEventListener("pointerdown", unlockAudio);
+    window.addEventListener("keydown", unlockAudio);
+    return () => {
+      window.removeEventListener("pointerdown", unlockAudio);
+      window.removeEventListener("keydown", unlockAudio);
+    };
+  }, []);
 
   // Реф для смены обложки
   const avatarInputRef = useRef(null);
@@ -341,6 +372,12 @@ export function PlaylistPage() {
         if (!data?.community) return;
 
         const comm = data.community;
+        if (comm.role) {
+          setMyRole(comm.role);
+        }
+        if (user?.id && comm.owner_id && user.id === comm.owner_id) {
+          setMyRole("owner");
+        }
         setPlaylist((prev) => ({
           ...prev,
           id: comm.id,
@@ -352,6 +389,10 @@ export function PlaylistPage() {
         }));
 
         if (Array.isArray(data.members) && data.members.length > 0) {
+          const myMember = data.members.find((m) => m.id === user?.id);
+          if (myMember?.role) {
+            setMyRole(myMember.role);
+          }
           const adminIds = data.members
             .filter((m) => m.role === "owner" || m.role === "moderator")
             .map((m) => m.id);
@@ -410,6 +451,28 @@ export function PlaylistPage() {
             }));
           setTracks(active);
 
+          if (data.playback) {
+            const pb = data.playback;
+            if (pb.state === "playing" && pb.current_track_id) {
+              const trackToPlay = active.find((t) => String(t.id) === String(pb.current_track_id));
+              if (trackToPlay) {
+                if (audioService.currentTrack?.id !== trackToPlay.id || !audioService.isPlaying) {
+                  audioService.play({
+                    ...trackToPlay,
+                    room_id: roomId,
+                    library_key: trackToPlay.library_key || "dawn",
+                  }).catch(() => {});
+                  setPlayer({ trackId: trackToPlay.id, playing: true, progress: 0, elapsed: 0 });
+                }
+              }
+            } else if (pb.state === "paused") {
+              if (audioService.isPlaying) {
+                audioService.pause();
+              }
+              setPlayer((p) => ({ ...p, playing: false }));
+            }
+          }
+
           const pending = data.tracks
             .filter((t) => t.status === "pending")
             .map((t, idx) => ({
@@ -451,7 +514,7 @@ export function PlaylistPage() {
         }
       })
       .catch(() => {});
-  }, []);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!currentRoomId) return;
@@ -474,6 +537,24 @@ export function PlaylistPage() {
           try {
             const data = JSON.parse(event.data);
             if (data?.type === "room_updated") {
+              if (data.action === "playback") {
+                if (data.state === "paused") {
+                  audioService.pause();
+                  setPlayer((p) => ({ ...p, playing: false }));
+                } else if (data.state === "playing" && data.track_id) {
+                  const targetTrack = tracksRef.current.find((t) => String(t.id) === String(data.track_id));
+                  if (targetTrack) {
+                    if (audioService.currentTrack?.id !== targetTrack.id || !audioService.isPlaying) {
+                      audioService.play({
+                        ...targetTrack,
+                        room_id: currentRoomId,
+                        library_key: targetTrack.library_key || "dawn",
+                      }).catch(() => {});
+                      setPlayer({ trackId: targetTrack.id, playing: true, progress: 0, elapsed: 0 });
+                    }
+                  }
+                }
+              }
               fetchCommunityData(currentRoomId);
             }
           } catch {}
@@ -539,13 +620,34 @@ export function PlaylistPage() {
   }, []);
 
   // Плеер: методы управления воспроизведением с реальным звуком
-  const playTrack = useCallback((trackId) => {
+  const playTrack = useCallback(async (trackId) => {
+    if (!canModerate) {
+      if (player.trackId === trackId && player.playing) {
+        audioService.unlock();
+        showToast("🎧 Вы слушаете общий эфир плейлиста");
+        return;
+      }
+      showToast("⚠️ Управлять воспроизведением может только администратор");
+      return;
+    }
+
     const track = tracks.find((t) => t.id === trackId);
     if (!track) return;
+
+    const token = localStorage.getItem("token");
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
 
     if (player.trackId === trackId && player.playing) {
       audioService.pause();
       setPlayer((p) => ({ ...p, playing: false }));
+      if (currentRoomId) {
+        try {
+          await fetch(`/api/communities/${currentRoomId}/tracks/${trackId}/pause`, {
+            method: "POST",
+            headers,
+          });
+        } catch {}
+      }
     } else {
       audioService.play({
         ...track,
@@ -553,10 +655,22 @@ export function PlaylistPage() {
         library_key: track.library_key || "dawn",
       });
       setPlayer({ trackId, playing: true, progress: 0, elapsed: 0 });
+      if (currentRoomId) {
+        try {
+          await fetch(`/api/communities/${currentRoomId}/tracks/${trackId}/play`, {
+            method: "POST",
+            headers,
+          });
+        } catch {}
+      }
     }
-  }, [tracks, player.trackId, player.playing, currentRoomId]);
+  }, [canModerate, tracks, player.trackId, player.playing, currentRoomId, showToast]);
 
-  const playerNext = useCallback(() => {
+  const playerNext = useCallback(async () => {
+    if (!canModerate) {
+      showToast("⚠️ Переключать треки может только администратор");
+      return;
+    }
     const s = sortedTracks(tracks);
     if (!s.length) return;
     const idx = s.findIndex((t) => t.id === player.trackId);
@@ -567,9 +681,23 @@ export function PlaylistPage() {
       library_key: next.library_key || "dawn",
     });
     setPlayer({ trackId: next.id, playing: true, progress: 0, elapsed: 0 });
-  }, [tracks, player.trackId, currentRoomId]);
+    if (currentRoomId) {
+      try {
+        const token = localStorage.getItem("token");
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        await fetch(`/api/communities/${currentRoomId}/tracks/${next.id}/play`, {
+          method: "POST",
+          headers,
+        });
+      } catch {}
+    }
+  }, [canModerate, tracks, player.trackId, currentRoomId, showToast]);
 
-  const playerPrev = useCallback(() => {
+  const playerPrev = useCallback(async () => {
+    if (!canModerate) {
+      showToast("⚠️ Переключать треки может только администратор");
+      return;
+    }
     const s = sortedTracks(tracks);
     if (!s.length) return;
     const idx = s.findIndex((t) => t.id === player.trackId);
@@ -580,14 +708,46 @@ export function PlaylistPage() {
       library_key: prev.library_key || "dawn",
     });
     setPlayer({ trackId: prev.id, playing: true, progress: 0, elapsed: 0 });
-  }, [tracks, player.trackId, currentRoomId]);
+    if (currentRoomId) {
+      try {
+        const token = localStorage.getItem("token");
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
+        await fetch(`/api/communities/${currentRoomId}/tracks/${prev.id}/play`, {
+          method: "POST",
+          headers,
+        });
+      } catch {}
+    }
+  }, [canModerate, tracks, player.trackId, currentRoomId, showToast]);
 
-  const togglePlay = () => {
+  const togglePlay = useCallback(async () => {
+    if (!canModerate) {
+      if (player.trackId && player.playing) {
+        audioService.unlock();
+        showToast("🎧 Вы слушаете общий эфир плейлиста");
+      } else {
+        showToast("⚠️ Управлять воспроизведением может только администратор");
+      }
+      return;
+    }
+
+    const token = localStorage.getItem("token");
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
+
     if (!player.trackId && tracks.length > 0) {
-      playTrack(sortedTracks(tracks)[0].id);
-    } else if (player.playing) {
+      const first = sortedTracks(tracks)[0];
+      if (first) playTrack(first.id);
+    } else if (player.playing && player.trackId) {
       audioService.pause();
       setPlayer((p) => ({ ...p, playing: false }));
+      if (currentRoomId) {
+        try {
+          await fetch(`/api/communities/${currentRoomId}/tracks/${player.trackId}/pause`, {
+            method: "POST",
+            headers,
+          });
+        } catch {}
+      }
     } else if (player.trackId) {
       const track = tracks.find((t) => t.id === player.trackId);
       if (track) {
@@ -597,11 +757,23 @@ export function PlaylistPage() {
           library_key: track.library_key || "dawn",
         });
         setPlayer((p) => ({ ...p, playing: true }));
+        if (currentRoomId) {
+          try {
+            await fetch(`/api/communities/${currentRoomId}/tracks/${track.id}/play`, {
+              method: "POST",
+              headers,
+            });
+          } catch {}
+        }
       }
     }
-  };
+  }, [canModerate, tracks, player.trackId, player.playing, currentRoomId, playTrack, showToast]);
 
   const seekPlayer = (e) => {
+    if (!canModerate) {
+      showToast("⚠️ Управлять воспроизведением может только администратор");
+      return;
+    }
     const rect = e.currentTarget.getBoundingClientRect();
     const pct = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
     const currentT = tracks.find((t) => t.id === player.trackId);
@@ -615,7 +787,9 @@ export function PlaylistPage() {
   // Подписка на аудио движок
   useEffect(() => {
     audioService.onEnded = () => {
-      playerNext();
+      if (canModerate) {
+        playerNext();
+      }
     };
     const unsubscribe = audioService.subscribe((state) => {
       if (state.track) {
@@ -630,13 +804,7 @@ export function PlaylistPage() {
     return () => {
       unsubscribe();
     };
-  }, [playerNext]);
-
-  const showToast = useCallback((msg) => {
-    setToast(msg);
-    clearTimeout(toastTimer.current);
-    toastTimer.current = setTimeout(() => setToast(null), 3000);
-  }, []);
+  }, [playerNext, canModerate]);
 
   const handleToggleFavorite = async (trackId) => {
     const t = tracks.find((x) => x.id === trackId);
@@ -1092,11 +1260,16 @@ export function PlaylistPage() {
             <span className="text-white font-medium">Предложить трек</span>
           </button>
 
-          {/* Элемент "Владелец" / "Модератор" — в точности такого же размера и формата (h-10, px-4, rounded-xl, text-sm) */}
-          {canModerate && (
+          {/* Элемент "Владелец" / "Модератор" / "Слушатель" */}
+          {canModerate ? (
             <span className="h-10 px-4 rounded-xl bg-[#171717] border border-[#262626] text-sm font-medium inline-flex items-center gap-2 select-none">
               <ShieldCheck size={16} className="text-[#a3e635]" />
               <span className="text-white">{playlist.creatorId === user.id ? "Владелец" : "Модератор"}</span>
+            </span>
+          ) : (
+            <span className="h-10 px-4 rounded-xl bg-[#171717] border border-[#262626] text-sm font-medium inline-flex items-center gap-2 select-none text-neutral-400" title="Вы слушаете синхронный эфир плейлиста">
+              <Users size={15} className="text-neutral-400" />
+              <span>Слушатель</span>
             </span>
           )}
         </div>
@@ -1125,6 +1298,35 @@ export function PlaylistPage() {
           ))}
         </div>
       </div>
+
+      {/* ═══ БАННЕР СИНХРОННОГО ЭФИРА ════════════════════════════════════════ */}
+      {player.playing && currentTrack && (
+        <div
+          onClick={() => {
+            audioService.unlock();
+            showToast("🎧 Звук совместного эфира активен");
+          }}
+          className="mb-4 px-4 py-2.5 rounded-xl bg-[#1c231d] border border-[#2e402d] flex items-center justify-between gap-3 cursor-pointer hover:bg-[#243025] transition-all"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#a3e635] opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#a3e635]"></span>
+            </span>
+            <p className="text-xs font-semibold text-white truncate">
+              Сейчас играет для всех: <span className="text-[#a3e635]">«{currentTrack.title}» — {currentTrack.artist}</span>
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[11px] text-neutral-400 hidden sm:inline">
+              {canModerate ? "Вы управляете эфиром" : "Нажмите, чтобы включить звук"}
+            </span>
+            <span className="text-xs font-bold text-[#a3e635] bg-[#243025] px-2.5 py-1 rounded-lg border border-[#3c543b]">
+              {canModerate ? "В эфире 🔴" : "Включить звук 🔊"}
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* ═══ ВКЛАДКА: В ОЧЕРЕДИ (РЕЙТИНГ) ════════════════════════════════════ */}
       {activeTab === "queue" && (
@@ -1193,27 +1395,43 @@ export function PlaylistPage() {
               </div>
             )}
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-white truncate max-w-[160px]">{currentTrack?.title ?? "—"}</p>
-              <p className="text-xs text-neutral-400 truncate max-w-[160px]">{currentTrack?.artist ?? "Выберите трек"}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-semibold text-white truncate max-w-[150px]">{currentTrack?.title ?? "—"}</p>
+                {player.playing && (
+                  <span className="hidden sm:inline-flex items-center gap-1 text-[10px] font-semibold text-[#a3e635] bg-[#1c231d] border border-[#2e402d] px-1.5 py-0.2 rounded-md">
+                    <Radio size={10} className="animate-pulse" /> Эфир
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-neutral-400 truncate max-w-[150px]">{currentTrack?.artist ?? "Выберите трек"}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 shrink-0">
-            <button onClick={playerPrev} className="w-8 h-8 flex items-center justify-center text-neutral-400 hover:text-white transition-colors rounded-lg hover:bg-neutral-800 cursor-pointer">
+            <button
+              onClick={playerPrev}
+              title={canModerate ? "Предыдущий трек" : "Только для администратора"}
+              className="w-8 h-8 flex items-center justify-center text-neutral-400 hover:text-white transition-colors rounded-lg hover:bg-neutral-800 cursor-pointer"
+            >
               <SkipBack size={16} />
             </button>
             <button
               onClick={togglePlay}
+              title={canModerate ? (player.playing ? "Пауза для всех" : "Воспроизведение для всех") : (player.playing ? "Слушать общий эфир" : "Только администратор включает эфир")}
               className="w-10 h-10 flex items-center justify-center rounded-full bg-[#1c231d] border border-[#2e402d] text-white hover:bg-[#243025] hover:border-[#3c543b] transition-colors cursor-pointer"
             >
               {player.playing ? <Pause size={17} className="fill-[#a3e635] text-[#a3e635]" /> : <Play size={17} className="fill-[#a3e635] text-[#a3e635] ml-0.5" />}
             </button>
-            <button onClick={playerNext} className="w-8 h-8 flex items-center justify-center text-neutral-400 hover:text-white transition-colors rounded-lg hover:bg-neutral-800 cursor-pointer">
+            <button
+              onClick={playerNext}
+              title={canModerate ? "Следующий трек" : "Только для администратора"}
+              className="w-8 h-8 flex items-center justify-center text-neutral-400 hover:text-white transition-colors rounded-lg hover:bg-neutral-800 cursor-pointer"
+            >
               <SkipForward size={16} />
             </button>
           </div>
 
-          <span className="text-xs text-neutral-500 tabular-nums shrink-0">{fmtTime(player.elapsed)} / 4:00</span>
+          <span className="text-xs text-neutral-500 tabular-nums shrink-0">{fmtTime(player.elapsed)} / {fmtTime(currentTrack?.duration_seconds || 45)}</span>
           <NextBadge tracks={tracks} currentId={player.trackId} />
         </div>
       </div>
