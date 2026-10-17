@@ -11,7 +11,7 @@ from app.auth import (
     verify_password,
 )
 from app.database import get_db
-from app.models import User
+from app.models import MemberRole, Room, RoomMember, User
 from app.schemas import LoginRequest, RegisterRequest, TokenResponse, UserOut
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -33,6 +33,12 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         display_name=payload.display_name.strip(),
     )
     db.add(user)
+    db.flush()
+
+    base_room = db.scalar(select(Room).where(Room.name == "ИИНОД-82", Room.is_active.is_(True)))
+    if base_room is not None:
+        db.add(RoomMember(room_id=base_room.id, user_id=user.id, role=MemberRole.MEMBER))
+
     db.commit()
     db.refresh(user)
 

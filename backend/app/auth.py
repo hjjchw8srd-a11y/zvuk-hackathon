@@ -18,11 +18,12 @@ import bcrypt
 import jwt
 from fastapi import Depends, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.database import get_db
-from app.models import User
+from app.models import MemberRole, Room, RoomMember, User
 
 
 COOKIE_NAME = "volna_guest"
@@ -114,6 +115,12 @@ def get_current_user(
     # 3. Create anonymous guest
     user = User(display_name="Новый слушатель")
     db.add(user)
+    db.flush()
+
+    base_room = db.scalar(select(Room).where(Room.name == "ИИНОД-82", Room.is_active.is_(True)))
+    if base_room is not None:
+        db.add(RoomMember(room_id=base_room.id, user_id=user.id, role=MemberRole.MEMBER))
+
     db.commit()
     db.refresh(user)
     token = f"{user.id}.{_cookie_signature(user.id)}"

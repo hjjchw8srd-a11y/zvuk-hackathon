@@ -335,6 +335,27 @@ def update_community(
     }
 
 
+@router.delete("/communities/{room_id}", status_code=200)
+def delete_community(
+    room_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    room = db.get(Room, room_id)
+    if room is None:
+        return {"ok": True}
+
+    membership = db.get(RoomMember, (room.id, user.id))
+    if membership is not None:
+        db.delete(membership)
+
+    if room.owner_id == user.id:
+        room.is_active = False
+
+    db.commit()
+    return {"ok": True}
+
+
 @router.post("/join")
 def join_community(
     payload: JoinRequest,

@@ -46,13 +46,13 @@ def seed_database():
             print(f"   [i] Демо-пользователь уже существует: {demo_email}")
 
         # 2. Создаем демо-плейлист (комнату)
-        demo_room_name = "Плейлист Хакатона Звук × ВШЭ"
+        demo_room_name = "ИИНОД-82"
         room = db.scalar(select(Room).where(Room.name == demo_room_name))
         if room is None:
             room = Room(
                 name=demo_room_name,
-                faculty="Факультет компьютерных наук",
-                description="Главный плейлист сообщества: предлагайте треки, голосуйте и слушайте вместе!",
+                faculty="ИИНОД-82",
+                description="Главный плейлист базового сообщества ИИНОД-82: предлагайте треки, голосуйте и слушайте вместе!",
                 avatar_url="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500",
                 external_link="https://zvuk.com",
                 invite_code="ZVUK26",

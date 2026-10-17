@@ -26,9 +26,10 @@ const DEFAULT_USER = {
 };
 
 const DEFAULT_PLAYLIST = {
-  id: "pl1",
-  name: "Факультет ИТ · Плейлист 2025",
-  memberCount: 248,
+  id: "e397a23e-50c5-40f0-81b1-39c27b52d1b0",
+  name: "ИИНОД-82",
+  faculty: "ИИНОД-82",
+  memberCount: 28,
   creatorId: "u1",
   admins: ["u1"],
   gradient: "from-violet-700 via-fuchsia-600 to-pink-500",
@@ -957,7 +958,7 @@ export function PlaylistPage() {
 
         {/* Мета-информация под обложкой */}
         <div className="pt-12 pb-5 px-5 text-center">
-          <p className="text-[11px] font-bold uppercase tracking-widest text-neutral-500 mb-1">🎓 Сообщество · Факультет ИТ</p>
+          <p className="text-[11px] font-bold uppercase tracking-widest text-neutral-500 mb-1">🎓 Сообщество · {playlist.faculty || "ИИНОД-82"}</p>
           <h1 className="text-xl font-extrabold text-white mb-3 leading-tight">{playlist.name}</h1>
 
           {/* Аватарки участников + статус */}

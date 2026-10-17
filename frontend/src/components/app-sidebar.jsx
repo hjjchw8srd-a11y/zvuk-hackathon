@@ -124,8 +124,23 @@ export function AppSidebar() {
     navigate("/playlist");
   };
 
-  const handleRemoveCommunity = (idToRemove) => {
+  const handleRemoveCommunity = async (idToRemove) => {
     setCommunities((prev) => prev.filter((item) => item.id !== idToRemove));
+
+    try {
+      const token = localStorage.getItem("token");
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      await fetch(`/api/communities/${idToRemove}`, {
+        method: "DELETE",
+        headers,
+      });
+    } catch {}
+
+    window.dispatchEvent(new Event("communities_updated"));
+
+    if (window.location.pathname === `/community/${idToRemove}`) {
+      navigate("/playlist");
+    }
   };
 
   const handleJoinByCode = async (inviteCode) => {
