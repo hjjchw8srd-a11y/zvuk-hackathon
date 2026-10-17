@@ -15,8 +15,11 @@ export default function App() {
   const navigate = useNavigate();
 
   useEffect(() => {
+    if (location.pathname.includes("/party")) {
+      return;
+    }
     const params = new URLSearchParams(location.search);
-    const code = params.get("invite") || params.get("join") || params.get("code");
+    const code = params.get("invite") || params.get("code");
     if (code) {
       const token = localStorage.getItem("token");
       const headers = {

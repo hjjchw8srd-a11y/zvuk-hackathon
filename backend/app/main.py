@@ -18,10 +18,11 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app.config import BACKEND_DIR, settings
-from app.database import engine
+from app.database import Base, engine
 from app import models as _models  # noqa: F401 — регистрирует модели в metadata
-from app.routers import auth, communities, users
+from app.routers import auth, communities, parties, users
 from app.routers.communities import manager, ws_community
+from app.routers.parties import party_manager, ws_party_endpoint
 
 _ = _models
 
@@ -32,16 +33,15 @@ app = FastAPI(title="ритм. backend", version="1.0.0")
 @app.on_event("startup")
 async def startup_event():
     try:
-        manager.set_loop(asyncio.get_running_loop())
+        loop = asyncio.get_running_loop()
+        manager.set_loop(loop)
+        party_manager.set_loop(loop)
     except Exception:
         pass
     try:
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE rooms ADD COLUMN IF NOT EXISTS party_is_active BOOLEAN NOT NULL DEFAULT false;"))
-            conn.execute(text("ALTER TABLE rooms ADD COLUMN IF NOT EXISTS party_name VARCHAR(150);"))
-            conn.execute(text("ALTER TABLE rooms ADD COLUMN IF NOT EXISTS party_started_at TIMESTAMPTZ;"))
+        Base.metadata.create_all(bind=engine)
     except Exception as e:
-        print("Party DDL check:", e)
+        print("Tables create_all check:", e)
     try:
         from app.seed import seed_database
         seed_database()
@@ -52,6 +52,11 @@ async def startup_event():
 @app.websocket("/ws/communities/{room_id}")
 async def root_ws_community(websocket: WebSocket, room_id: uuid.UUID):
     await ws_community(websocket, room_id)
+
+
+@app.websocket("/ws/parties/{party_id}")
+async def root_ws_party(websocket: WebSocket, party_id: uuid.UUID):
+    await ws_party_endpoint(websocket, party_id)
 
 # ── CORS ────────────────────────────────────────────────────────────────────
 # allow_origins=["*"] + allow_credentials не работают вместе в браузере.
@@ -73,6 +78,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(communities.router)
+app.include_router(parties.router)
 
 
 # ── Сервинг загружённых аудиофайлов ─────────────────────────────────────────
