@@ -427,7 +427,10 @@ export function PartyPage() {
 
   // Join party by code handler
   const handleJoinParty = async () => {
-    if (!joinCodeInput.trim()) return;
+    if (!joinCodeInput.trim()) {
+      showToast("⚠️ Пожалуйста, введите инвайт-код вечеринки (например, PXXXXX)");
+      return;
+    }
     setIsSubmitting(true);
     try {
       const token = localStorage.getItem("token");
@@ -670,17 +673,29 @@ export function PartyPage() {
     return (
       <div className="w-full max-w-5xl mx-auto py-8 px-4 pb-32">
         {/* Хедер лендинга */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs font-bold uppercase tracking-widest mb-4">
-            <Flame size={14} className="text-orange-500" />
-            ИЗОЛИРОВАННЫЙ PARTY MODE
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mb-10 pb-6 border-b border-[#262626]/70">
+          <div className="text-center sm:text-left">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs font-bold uppercase tracking-widest mb-3">
+              <Flame size={14} className="text-orange-500" />
+              ИЗОЛИРОВАННЫЙ PARTY MODE
+            </div>
+            <h1 className="text-3xl sm:text-5xl font-black text-white tracking-tight mb-2">
+              Вечеринка в ритме 🔥
+            </h1>
+            <p className="text-neutral-400 max-w-xl text-xs sm:text-sm leading-relaxed">
+              Отдельное независимое пространство: своя очередь треков, инвайт-код для друзей, живое голосование и синхронный звук.
+            </p>
           </div>
-          <h1 className="text-4xl sm:text-5xl font-black text-white tracking-tight mb-4">
-            Вечеринка в ритме 🔥
-          </h1>
-          <p className="text-neutral-400 max-w-xl mx-auto text-sm sm:text-base leading-relaxed">
-            Отдельное независимое пространство для совместного прослушивания: своя очередь треков, инвайт-код для друзей, живое голосование и синхронный звук.
-          </p>
+
+          <button
+            type="button"
+            onClick={() => setIsStreamerBotOpen(true)}
+            className="px-5 py-3 rounded-2xl bg-purple-950/40 hover:bg-purple-900/60 border border-purple-700/50 text-purple-300 hover:text-white font-bold text-xs transition-all flex items-center gap-2.5 cursor-pointer shadow-xl shadow-purple-950/20 shrink-0 active:scale-95"
+            title="Настройка Twitch чата и Streamer.bot"
+          >
+            <Bot size={18} />
+            <span>Twitch Чат / Бот</span>
+          </button>
         </div>
 
         {/* Две карточки: Создать или Войти */}
@@ -729,7 +744,7 @@ export function PartyPage() {
 
             <button
               onClick={handleCreateParty}
-              disabled={isSubmitting || !createTitle.trim()}
+              disabled={isSubmitting}
               className="mt-8 w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-orange-500 via-amber-500 to-rose-600 hover:opacity-95 text-white font-bold text-sm tracking-wide shadow-xl shadow-orange-500/25 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98 disabled:opacity-50"
             >
               <Flame size={18} />
@@ -771,7 +786,7 @@ export function PartyPage() {
 
             <button
               onClick={handleJoinParty}
-              disabled={isSubmitting || !joinCodeInput.trim()}
+              disabled={isSubmitting}
               className="mt-8 w-full py-4 px-6 rounded-2xl bg-[#1c231d] border border-[#2e402d] hover:bg-[#243025] text-[#a3e635] font-bold text-sm tracking-wide shadow-xl flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98 disabled:opacity-50"
             >
               <Share2 size={18} />
@@ -786,6 +801,13 @@ export function PartyPage() {
             {toast}
           </div>
         )}
+
+        {/* Модальное окно Twitch чата */}
+        <StreamerBotModal
+          open={isStreamerBotOpen}
+          onOpenChange={setIsStreamerBotOpen}
+          currentRoomCode="ZVUK26"
+        />
       </div>
     );
   }

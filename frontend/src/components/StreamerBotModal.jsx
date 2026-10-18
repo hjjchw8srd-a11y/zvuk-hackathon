@@ -15,6 +15,9 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
   const [testResult, setTestResult] = useState(null);
   const [testing, setTesting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [justSynced, setJustSynced] = useState(false);
+  const [copiedTunnel, setCopiedTunnel] = useState(false);
+  const resultRef = useRef(null);
 
   const fetchStatus = useCallback(async () => {
     setLoading(true);
@@ -54,6 +57,8 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
       });
       if (res.ok) {
         setStatus(await res.json());
+        setJustSynced(true);
+        setTimeout(() => setJustSynced(false), 4000);
       }
     } catch {
       // Ignore
@@ -62,9 +67,10 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
     }
   };
 
-  const handleSimulate = async (e) => {
-    e?.preventDefault();
-    if (!testCommand.trim() || testing) return;
+  const handleSimulateWithText = async (cmdText) => {
+    const textToRun = (cmdText || testCommand).trim();
+    if (!textToRun || testing) return;
+    setTestCommand(textToRun);
     setTesting(true);
     setTestResult(null);
     try {
@@ -76,7 +82,7 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
       const res = await fetch("/api/integrations/streamerbot/simulate", {
         method: "POST",
         headers,
-        body: JSON.stringify({ text: testCommand.trim() }),
+        body: JSON.stringify({ text: textToRun }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -88,15 +94,31 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
       setTestResult({ ok: false, error: "Не удалось связаться с сервером" });
     } finally {
       setTesting(false);
+      setTimeout(() => {
+        resultRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 100);
     }
+  };
+
+  const handleSimulate = async (e) => {
+    e?.preventDefault();
+    await handleSimulateWithText(testCommand);
+  };
+
+  const handleCopyTunnel = () => {
+    const tunnelCmd = "ssh -N -R 8080:127.0.0.1:8080 root@31.77.174.168";
+    navigator.clipboard?.writeText(tunnelCmd);
+    setCopiedTunnel(true);
+    setTimeout(() => setCopiedTunnel(false), 3000);
   };
 
   const isConnected = status?.connected;
   const isEnabled = status?.enabled;
+  const isBoundToCurrent = justSynced || (status?.room_code && currentRoomCode && status.room_code.toUpperCase() === currentRoomCode.toUpperCase());
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[560px] bg-[#121215] border-[#262630] text-white p-6 rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+      <DialogContent className="sm:max-w-[580px] bg-[#121215] border-[#262630] text-white p-6 rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-start justify-between gap-4 border-b border-[#262630]/70 pb-4">
           <div className="flex items-center gap-3">
@@ -129,7 +151,7 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
         <div className="flex-1 overflow-y-auto space-y-4 py-3 pr-1 text-xs">
           {/* Status Banner */}
           <div className="rounded-2xl bg-[#16161d] border border-[#262630] p-4 flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 min-w-0">
               <span
                 className={cn(
                   "w-3 h-3 rounded-full shrink-0",
@@ -140,17 +162,18 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
                     : "bg-neutral-600"
                 )}
               />
-              <div>
-                <p className="font-bold text-white text-xs">
+              <div className="min-w-0">
+                <p className="font-bold text-white text-xs truncate">
                   {isConnected
                     ? "Подключено к Streamer.bot (Twitch активен)"
                     : isEnabled
                     ? "Мост включен, ожидает Streamer.bot"
                     : "Интеграция выключена"}
                 </p>
-                <p className="text-[11px] text-neutral-400 mt-0.5">
+                <p className="text-[11px] text-neutral-400 mt-0.5 truncate">
                   {status?.url || "ws://127.0.0.1:8080/"}
-                  {status?.commands_processed ? ` · Обработано команд: ${status.commands_processed}` : ""}
+                  {status?.room_code ? ` · Комната: ${status.room_code}` : ""}
+                  {status?.commands_processed ? ` · Обработано: ${status.commands_processed}` : ""}
                 </p>
               </div>
             </div>
@@ -159,12 +182,48 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
               <button
                 onClick={handleSyncRoom}
                 disabled={syncing}
-                className="px-3 py-1.5 rounded-xl bg-purple-600/20 border border-purple-500/40 text-purple-300 hover:bg-purple-600/30 font-semibold text-[11px] transition-all cursor-pointer shrink-0"
+                className={cn(
+                  "px-3 py-1.5 rounded-xl font-bold text-[11px] transition-all cursor-pointer shrink-0 flex items-center gap-1.5",
+                  isBoundToCurrent
+                    ? "bg-emerald-600/20 border border-emerald-500/40 text-emerald-300"
+                    : "bg-purple-600/30 border border-purple-500/50 text-purple-200 hover:bg-purple-600/50"
+                )}
               >
-                {syncing ? "Привязка..." : `Привязать ${currentRoomCode}`}
+                {syncing ? (
+                  "Привязка..."
+                ) : isBoundToCurrent ? (
+                  <>
+                    <CheckCircle2 size={13} className="text-emerald-400" />
+                    <span>Привязано к {currentRoomCode}</span>
+                  </>
+                ) : (
+                  <span>Привязать {currentRoomCode}</span>
+                )}
               </button>
             )}
           </div>
+
+          {/* SSH Tunnel Hint for remote connection if not yet connected */}
+          {!isConnected && (
+            <div className="rounded-2xl bg-neutral-900/70 border border-neutral-800 p-3 text-[11px]">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="font-semibold text-neutral-300 flex items-center gap-1.5">
+                  <Terminal size={12} className="text-purple-400" />
+                  Подключение Streamer.bot с вашего ПК:
+                </span>
+                <button
+                  type="button"
+                  onClick={handleCopyTunnel}
+                  className="px-2 py-0.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-purple-300 text-[10px] font-mono transition-colors cursor-pointer"
+                >
+                  {copiedTunnel ? "✓ Скопировано!" : "Скопировать SSH"}
+                </button>
+              </div>
+              <p className="font-mono text-[10px] text-neutral-400 bg-neutral-950 p-2 rounded-xl border border-neutral-800 select-all truncate">
+                ssh -N -R 8080:127.0.0.1:8080 root@31.77.174.168
+              </p>
+            </div>
+          )}
 
           {/* How it works info */}
           <div className="rounded-2xl bg-amber-500/10 border border-amber-500/25 p-3.5 text-amber-200/90 leading-relaxed">
@@ -186,29 +245,28 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
           <div>
             <p className="font-bold uppercase tracking-wider text-[11px] text-neutral-400 mb-2 flex items-center gap-1.5">
               <Terminal size={12} className="text-purple-400" />
-              Команды в чате Twitch
+              Команды в чате Twitch (нажмите для быстрой проверки)
             </p>
             <div className="rounded-2xl bg-[#16161d] border border-[#262630] divide-y divide-[#262630] overflow-hidden font-mono text-[11px]">
-              <div className="p-2.5 flex items-center justify-between">
-                <span className="text-purple-300 font-bold">!sr &lt;название&gt;</span>
-                <span className="text-neutral-400 font-sans">Предложить трек в очередь (алиас: !track, !трек)</span>
-              </div>
-              <div className="p-2.5 flex items-center justify-between">
-                <span className="text-purple-300 font-bold">!tracks</span>
-                <span className="text-neutral-400 font-sans">Показать список треков медиатеки</span>
-              </div>
-              <div className="p-2.5 flex items-center justify-between">
-                <span className="text-purple-300 font-bold">!queue</span>
-                <span className="text-neutral-400 font-sans">Показать топ очереди воспроизведения</span>
-              </div>
-              <div className="p-2.5 flex items-center justify-between">
-                <span className="text-purple-300 font-bold">!now</span>
-                <span className="text-neutral-400 font-sans">Показать играющий сейчас трек</span>
-              </div>
-              <div className="p-2.5 flex items-center justify-between">
-                <span className="text-purple-300 font-bold">!help</span>
-                <span className="text-neutral-400 font-sans">Справка по командам и ссылка на сайт</span>
-              </div>
+              {[
+                { cmd: "!sr dawn", desc: "Предложить трек в очередь (алиас: !track, !трек)" },
+                { cmd: "!tracks", desc: "Показать список треков медиатеки" },
+                { cmd: "!queue", desc: "Показать топ очереди воспроизведения" },
+                { cmd: "!now", desc: "Показать играющий сейчас трек" },
+                { cmd: "!help", desc: "Справка по командам и ссылка на сайт" },
+              ].map((item) => (
+                <div
+                  key={item.cmd}
+                  onClick={() => handleSimulateWithText(item.cmd)}
+                  className="p-2.5 flex items-center justify-between hover:bg-neutral-800/40 cursor-pointer transition-colors group"
+                  title="Нажмите для проверки этой команды в симуляторе"
+                >
+                  <span className="text-purple-300 group-hover:text-purple-200 font-bold underline decoration-dotted underline-offset-4">
+                    {item.cmd}
+                  </span>
+                  <span className="text-neutral-400 font-sans text-[11px]">{item.desc}</span>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -216,8 +274,24 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
           <div className="rounded-2xl bg-[#16161d] border border-[#262630] p-3.5">
             <p className="font-bold text-[11px] text-neutral-300 mb-2 flex items-center gap-1.5">
               <Music2 size={12} className="text-purple-400" />
-              Симулятор команды (проверка без открытого стрима)
+              Симулятор команды (проверка бота прямо сейчас)
             </p>
+
+            {/* Quick Chips */}
+            <div className="flex flex-wrap gap-1.5 mb-2.5">
+              {["!tracks", "!sr dawn", "!queue", "!now", "!help"].map((chip) => (
+                <button
+                  key={chip}
+                  type="button"
+                  onClick={() => handleSimulateWithText(chip)}
+                  disabled={testing}
+                  className="px-2.5 py-1 rounded-lg bg-neutral-900 border border-neutral-700/60 text-purple-300 hover:text-white hover:border-purple-500/60 font-mono text-[10px] transition-colors cursor-pointer"
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+
             <form onSubmit={handleSimulate} className="flex gap-2">
               <input
                 type="text"
@@ -238,6 +312,7 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
 
             {testResult && (
               <div
+                ref={resultRef}
                 className={cn(
                   "mt-3 p-3 rounded-xl border text-[11px] font-mono leading-relaxed",
                   testResult.ok
