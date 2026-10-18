@@ -281,6 +281,13 @@ def handle_chat_command(
 
     # Handle active PartySession
     if party is not None:
+        from app.models import PartyVote
+
+        fallback_room = room or db.scalar(select(Room).order_by(Room.created_at.desc()).limit(1))
+        viewer = _ensure_twitch_viewer(
+            db, fallback_room, twitch_user_id, user_login, user_name or user_login
+        ) if fallback_room else None
+
         party_item = db.scalar(
             select(PartyQueueItem).where(
                 PartyQueueItem.party_id == party.id,
@@ -288,6 +295,30 @@ def handle_chat_command(
             )
         )
         if party_item is not None:
+            # Check if this user already voted for this track
+            if viewer:
+                already_voted = db.scalar(
+                    select(PartyVote).where(
+                        PartyVote.party_queue_item_id == party_item.id,
+                        PartyVote.user_id == viewer.id,
+                    )
+                )
+                if already_voted is not None:
+                    return CommandResult(
+                        reply=f"{mention}, вы уже голосовали за «{item['title']}» (всего баллов: {party_item.score}) 👍",
+                        room_id=party.id,
+                        track_id=party_item.id,
+                        action="already_voted",
+                    )
+                db.add(
+                    PartyVote(
+                        party_id=party.id,
+                        party_queue_item_id=party_item.id,
+                        user_id=viewer.id,
+                        value=1,
+                    )
+                )
+
             party_item.score += 1
             db.commit()
             party_manager.notify_party(
@@ -307,12 +338,6 @@ def handle_chat_command(
                 action="track_voted",
             )
 
-        # Resolve viewer user for contributor tag
-        fallback_room = room or db.scalar(select(Room).order_by(Room.created_at.desc()).limit(1))
-        viewer = _ensure_twitch_viewer(
-            db, fallback_room, twitch_user_id, user_login, user_name or user_login
-        ) if fallback_room else None
-
         new_party_item = PartyQueueItem(
             party_id=party.id,
             title=item["title"],
@@ -325,6 +350,18 @@ def handle_chat_command(
             score=1,
         )
         db.add(new_party_item)
+        db.flush()
+
+        if viewer:
+            db.add(
+                PartyVote(
+                    party_id=party.id,
+                    party_queue_item_id=new_party_item.id,
+                    user_id=viewer.id,
+                    value=1,
+                )
+            )
+
         db.commit()
         db.refresh(new_party_item)
         party_manager.notify_party(
@@ -601,18 +638,20 @@ class StreamerBotBridge:
     async def _on_chat_message(self, data: dict) -> None:
         user = data.get("user") or {}
         text = str(data.get("text") or "").strip()
-        login = str(user.get("login") or "viewer")
-        message_id = str(data.get("messageId") or f"{login}:{text}:{int(datetime.now(timezone.utc).timestamp())}")
-        if message_id and message_id in self._recent_id_set:
-            return
-        if message_id:
-            if len(self._recent_ids) == self._recent_ids.maxlen:
-                self._recent_id_set.discard(self._recent_ids[0])
-            self._recent_ids.append(message_id)
-            self._recent_id_set.add(message_id)
+        login = str(user.get("login") or "viewer").lower()
 
         if not text.startswith(settings.streamerbot_command_prefix or "!"):
             return
+
+        # Deduplicate command within a 3-second window (prevents dual firing from Streamer.bot + Twitch IRC)
+        now_bucket = int(datetime.now(timezone.utc).timestamp()) // 3
+        norm_key = f"cmd:{login}:{text.casefold()}:{now_bucket}"
+        if norm_key in self._recent_id_set:
+            return
+        if len(self._recent_ids) == self._recent_ids.maxlen:
+            self._recent_id_set.discard(self._recent_ids[0])
+        self._recent_ids.append(norm_key)
+        self._recent_id_set.add(norm_key)
 
         result = await asyncio.to_thread(
             self._handle_in_database,
