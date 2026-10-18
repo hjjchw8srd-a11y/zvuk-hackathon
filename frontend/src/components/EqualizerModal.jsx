@@ -88,7 +88,7 @@ function VerticalBandSlider({
           disabled
             ? "text-neutral-600 bg-neutral-900 border border-neutral-800"
             : value !== 0
-            ? "text-[#FDE047] bg-[#242016] border border-[#4a3f24] shadow-sm shadow-[#FDE047]/10"
+            ? "text-[#a3e635] bg-[#1c231d] border border-[#2e402d] shadow-sm shadow-[#a3e635]/10"
             : "text-neutral-400 bg-neutral-800/80 border border-neutral-700/60"
         )}
       >
@@ -118,7 +118,7 @@ function VerticalBandSlider({
           <div
             className={cn(
               "absolute left-1.5 right-1.5 rounded-full transition-all pointer-events-none",
-              isPositive ? "bg-gradient-to-t from-[#ca8a04] to-[#FDE047]" : "bg-gradient-to-b from-[#ca8a04] to-[#713f12]"
+              isPositive ? "bg-gradient-to-t from-[#65a30d] to-[#a3e635]" : "bg-gradient-to-b from-[#65a30d] to-[#365314]"
             )}
             style={{
               bottom: `${fillBottom}%`,
@@ -136,7 +136,7 @@ function VerticalBandSlider({
             "absolute left-1/2 -translate-x-1/2 w-6 h-6 rounded-full border shadow-md flex items-center justify-center transition-transform pointer-events-none",
             disabled
               ? "bg-neutral-800 border-neutral-700"
-              : "bg-white border-[#FDE047] shadow-[#FDE047]/30 group-hover:scale-105 active:scale-95"
+              : "bg-white border-[#a3e635] shadow-[#a3e635]/30 group-hover:scale-105 active:scale-95"
           )}
           style={{
             bottom: `calc(${percentage}% - 12px)`,
@@ -192,14 +192,14 @@ export function EqualizerModal({ open, onOpenChange }) {
         {/* Header */}
         <div className="flex items-start justify-between gap-4 pb-4 border-b border-[#242424]">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-2xl bg-[#242016] border border-[#4a3f24] text-[#FDE047] flex items-center justify-center shadow-lg shadow-[#FDE047]/10">
+            <div className="w-11 h-11 rounded-2xl bg-[#1c231d] border border-[#2e402d] text-[#a3e635] flex items-center justify-center shadow-lg shadow-[#a3e635]/10">
               <SlidersHorizontal size={22} />
             </div>
             <div>
               <DialogTitle className="text-xl font-bold text-white m-0 tracking-tight flex items-center gap-2">
                 Эквалайзер
                 {eqState.isEnabled && (
-                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-[#242016] border border-[#4a3f24] text-[#FDE047]">
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-[#1c231d] border border-[#2e402d] text-[#a3e635]">
                     Active
                   </span>
                 )}
@@ -217,12 +217,12 @@ export function EqualizerModal({ open, onOpenChange }) {
             className={cn(
               "flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-semibold border transition-all cursor-pointer mr-6 select-none",
               eqState.isEnabled
-                ? "bg-[#242016] border-[#4a3f24] text-[#FDE047] hover:bg-[#2d281c]"
+                ? "bg-[#1c231d] border-[#2e402d] text-[#a3e635] hover:bg-[#243025]"
                 : "bg-neutral-800/80 border-neutral-700 text-neutral-400 hover:text-white"
             )}
             title={eqState.isEnabled ? "Выключить эквалайзер" : "Включить эквалайзер"}
           >
-            <Power size={14} className={eqState.isEnabled ? "text-[#FDE047]" : "text-neutral-400"} />
+            <Power size={14} className={eqState.isEnabled ? "text-[#a3e635]" : "text-neutral-400"} />
             <span>{eqState.isEnabled ? "Включен" : "Выключен"}</span>
           </button>
         </div>
@@ -231,7 +231,7 @@ export function EqualizerModal({ open, onOpenChange }) {
         <div className="pt-2">
           <div className="flex items-center justify-between mb-2">
             <p className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-1.5">
-              <Sparkles size={12} className="text-[#FDE047]" /> Пресеты звучания
+              <Sparkles size={12} className="text-[#a3e635]" /> Пресеты звучания
             </p>
             {eqState.activePreset === "Custom" && (
               <span className="text-[11px] text-amber-400 font-medium">
@@ -251,7 +251,7 @@ export function EqualizerModal({ open, onOpenChange }) {
                   className={cn(
                     "py-2 px-2 rounded-xl text-xs font-semibold border transition-all cursor-pointer text-center truncate select-none",
                     isActive
-                      ? "bg-[#FDE047] text-black border-[#FDE047] shadow-md shadow-[#FDE047]/20 font-bold"
+                      ? "bg-[#a3e635] text-black border-[#a3e635] shadow-md shadow-[#a3e635]/20 font-bold"
                       : "bg-[#1a1a1a] border-[#292929] text-neutral-300 hover:text-white hover:bg-[#222222] hover:border-[#383838]"
                   )}
                 >
@@ -292,7 +292,7 @@ export function EqualizerModal({ open, onOpenChange }) {
         {/* Footer: Reset Button & Hint */}
         <div className="flex items-center justify-between pt-2 border-t border-[#242424] text-xs">
           <div className="flex items-center gap-1.5 text-neutral-500">
-            <Music4 size={14} className="text-[#FDE047]" />
+            <Music4 size={14} className="text-[#a3e635]" />
             <span>Плавная регулировка без щелчков и задержек</span>
           </div>
 

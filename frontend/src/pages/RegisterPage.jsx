@@ -77,7 +77,7 @@ export function RegisterPage() {
   return (
     <div className="relative min-h-[calc(100vh-120px)] flex flex-col items-center justify-center py-6 sm:py-10 px-3 sm:px-4">
       {/* Мягкое фоновое неоновое свечение */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[320px] sm:w-[500px] h-[250px] sm:h-[350px] bg-[#FDE047]/15 blur-[100px] sm:blur-[130px] rounded-full pointer-events-none" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[320px] sm:w-[500px] h-[250px] sm:h-[350px] bg-[#a3e635]/15 blur-[100px] sm:blur-[130px] rounded-full pointer-events-none" />
 
       <div className="relative w-full max-w-md">
         {/* Карточка формы */}
@@ -86,9 +86,9 @@ export function RegisterPage() {
           <div className="flex flex-col items-center text-center space-y-2.5 sm:space-y-3 mb-6 sm:mb-8">
             <Link
               to="/"
-              className="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-2xl bg-[#242016] border border-[#4a3f24] text-[#FDE047] hover:bg-[#2d281c] transition-colors select-none"
+              className="inline-flex items-center gap-2.5 px-3 py-1.5 rounded-2xl bg-[#1c231d] border border-[#2e402d] text-[#a3e635] hover:bg-[#243025] transition-colors select-none"
             >
-              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#FDE047] text-black">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#a3e635] text-black">
                 <svg
                   viewBox="0 0 36 36"
                   fill="none"
@@ -103,7 +103,7 @@ export function RegisterPage() {
                 </svg>
               </div>
               <span className="text-lg font-bold tracking-tight text-white flex items-baseline">
-                ритм<span className="text-[#FDE047] text-lg font-black">.</span>
+                ритм<span className="text-[#a3e635] text-lg font-black">.</span>
               </span>
             </Link>
 
@@ -176,7 +176,7 @@ export function RegisterPage() {
                     onChange={(e) => setDisplayName(e.target.value)}
                     placeholder="Например, Алексей Смирнов"
                     autoComplete="name"
-                    className="w-full h-11 pl-10 pr-4 rounded-xl bg-[#202020] border border-[#2e2e2e] text-white text-base sm:text-sm placeholder-neutral-500 outline-none transition focus:border-[#FDE047] focus:ring-1 focus:ring-[#FDE047]"
+                    className="w-full h-11 pl-10 pr-4 rounded-xl bg-[#202020] border border-[#2e2e2e] text-white text-base sm:text-sm placeholder-neutral-500 outline-none transition focus:border-[#a3e635] focus:ring-1 focus:ring-[#a3e635]"
                   />
                 </div>
               </div>
@@ -203,7 +203,7 @@ export function RegisterPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@example.com"
                   autoComplete="email"
-                  className="w-full h-11 pl-10 pr-4 rounded-xl bg-[#202020] border border-[#2e2e2e] text-white text-base sm:text-sm placeholder-neutral-500 outline-none transition focus:border-[#FDE047] focus:ring-1 focus:ring-[#FDE047]"
+                  className="w-full h-11 pl-10 pr-4 rounded-xl bg-[#202020] border border-[#2e2e2e] text-white text-base sm:text-sm placeholder-neutral-500 outline-none transition focus:border-[#a3e635] focus:ring-1 focus:ring-[#a3e635]"
                 />
               </div>
             </div>
@@ -232,7 +232,7 @@ export function RegisterPage() {
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   autoComplete={mode === "register" ? "new-password" : "current-password"}
-                  className="w-full h-11 pl-10 pr-11 rounded-xl bg-[#202020] border border-[#2e2e2e] text-white text-base sm:text-sm placeholder-neutral-500 outline-none transition focus:border-[#FDE047] focus:ring-1 focus:ring-[#FDE047]"
+                  className="w-full h-11 pl-10 pr-11 rounded-xl bg-[#202020] border border-[#2e2e2e] text-white text-base sm:text-sm placeholder-neutral-500 outline-none transition focus:border-[#a3e635] focus:ring-1 focus:ring-[#a3e635]"
                 />
                 <button
                   type="button"
@@ -249,7 +249,7 @@ export function RegisterPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full mt-6 h-12 inline-flex items-center justify-center gap-2 rounded-xl bg-[#FDE047] text-neutral-950 font-bold text-sm sm:text-base hover:bg-[#FEF08A] hover:scale-[1.01] active:scale-[0.99] transition-all shadow-lg shadow-[#FDE047]/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full mt-6 h-12 inline-flex items-center justify-center gap-2 rounded-xl bg-[#a3e635] text-neutral-950 font-bold text-sm sm:text-base hover:bg-[#bef264] hover:scale-[1.01] active:scale-[0.99] transition-all shadow-lg shadow-[#a3e635]/20 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isSubmitting ? (
                 <div className="h-5 w-5 border-2 border-black border-t-transparent rounded-full animate-spin" />
@@ -265,11 +265,11 @@ export function RegisterPage() {
           {/* Преимущества аккаунта */}
           <div className="mt-8 pt-6 border-t border-neutral-800/80 space-y-2 text-xs text-neutral-400">
             <div className="flex items-center gap-2 text-neutral-300">
-              <CheckCircle2 className="h-3.5 w-3.5 text-[#FDE047]" />
+              <CheckCircle2 className="h-3.5 w-3.5 text-[#a3e635]" />
               <span>Синхронизация любимых треков и очередей</span>
             </div>
             <div className="flex items-center gap-2 text-neutral-300">
-              <CheckCircle2 className="h-3.5 w-3.5 text-[#FDE047]" />
+              <CheckCircle2 className="h-3.5 w-3.5 text-[#a3e635]" />
               <span>Создание и администрирование своих комнат</span>
             </div>
           </div>

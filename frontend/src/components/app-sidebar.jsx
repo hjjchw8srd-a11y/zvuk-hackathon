@@ -208,7 +208,7 @@ export function AppSidebar() {
               onClick={() => isMobile && setOpenMobile(false)}
               className="flex items-center gap-3 px-2 py-1 rounded-xl transition-colors hover:bg-neutral-800/50 select-none min-w-0"
             >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#FDE047] shadow-xs">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#a3e635] shadow-xs">
                 <svg
                   viewBox="0 0 36 36"
                   fill="none"
@@ -223,7 +223,7 @@ export function AppSidebar() {
                 </svg>
               </div>
               <span className="text-2xl font-bold tracking-tight text-white flex items-baseline truncate">
-                ритм<span className="text-[#FDE047] text-2xl font-black">.</span>
+                ритм<span className="text-[#a3e635] text-2xl font-black">.</span>
               </span>
             </Link>
 
@@ -249,7 +249,7 @@ export function AppSidebar() {
               title="ритм."
               className="flex items-center justify-center rounded-xl transition-colors hover:bg-neutral-800/50 select-none p-1"
             >
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#FDE047] shadow-xs">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#a3e635] shadow-xs">
                 <svg
                   viewBox="0 0 36 36"
                   fill="none"
@@ -294,7 +294,7 @@ export function AppSidebar() {
                         <div className="flex items-center gap-2">
                           <item.icon className={cn(
                             isExpanded ? "h-4 w-4" : "h-6 w-6",
-                            item.badge === "LIVE" ? "text-yellow-400" : (item.badge === "ADMIN" ? "text-purple-400" : "")
+                            item.badge === "LIVE" ? "text-orange-400" : (item.badge === "ADMIN" ? "text-purple-400" : "")
                           )} />
                           {isExpanded && <span>{item.title}</span>}
                         </div>
@@ -302,9 +302,9 @@ export function AppSidebar() {
                           <span className={`text-[10px] font-black px-1.5 py-0.2 rounded-full flex items-center gap-1 ${
                             item.badge === "ADMIN"
                               ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
-                              : "bg-yellow-500/20 text-yellow-300 border border-yellow-500/40 animate-pulse"
+                              : "bg-orange-500/20 text-orange-400 border border-orange-500/40 animate-pulse"
                           }`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${item.badge === "ADMIN" ? "bg-purple-400" : "bg-yellow-400"}`} />
+                            <span className={`w-1.5 h-1.5 rounded-full ${item.badge === "ADMIN" ? "bg-purple-400" : "bg-orange-400"}`} />
                             {item.badge}
                           </span>
                         )}
@@ -426,7 +426,7 @@ export function AppSidebar() {
           >
             <div className={cn("flex items-center min-w-0", isExpanded ? "gap-2.5" : "justify-center w-full h-full")}>
               <div className={cn(
-                "flex shrink-0 items-center justify-center rounded-2xl bg-[#262626] text-[#FDE047] font-bold border border-[#333] overflow-hidden",
+                "flex shrink-0 items-center justify-center rounded-2xl bg-[#262626] text-[#a3e635] font-bold border border-[#333] overflow-hidden",
                 isExpanded ? "h-9 w-9 text-sm" : "w-12 h-12 text-base"
               )}>
                 {user.avatar_url ? (
@@ -468,7 +468,7 @@ export function AppSidebar() {
             title="Войти или зарегистрироваться"
             onClick={() => isMobile && setOpenMobile(false)}
             className={cn(
-              "rounded-2xl bg-[#242016] border border-[#4a3f24] text-[#FDE047] flex items-center hover:bg-[#2d281c] transition-all cursor-pointer group shadow-xs",
+              "rounded-2xl bg-[#1c231d] border border-[#2e402d] text-[#a3e635] flex items-center hover:bg-[#243025] transition-all cursor-pointer group shadow-xs",
               isExpanded
                 ? "w-full h-11 px-3 gap-2.5 justify-start text-xs font-bold"
                 : "w-12 h-12 aspect-square p-0 justify-center mx-auto"
@@ -484,14 +484,14 @@ export function AppSidebar() {
           onClick={() => setIsInviteOpen(true)}
           title="Музыка лучше вместе — Пригласи друзей"
           className={cn(
-            "rounded-2xl bg-[#221e16] border border-[#3f3520] flex items-center text-left hover:bg-[#2a251b] transition-all duration-300 ease-in-out cursor-pointer group overflow-hidden shadow-xs",
+            "rounded-2xl bg-[#1a211b] border border-[#2e402d] flex items-center text-left hover:bg-[#243025] transition-all duration-300 ease-in-out cursor-pointer group overflow-hidden shadow-xs",
             isExpanded
               ? "w-full h-[70px] p-2 gap-3"
               : "w-12 h-12 aspect-square p-0 gap-0 justify-center mx-auto"
           )}
         >
           <div className={cn(
-            "flex shrink-0 items-center justify-center rounded-2xl bg-[#382f1b] text-[#FDE047]",
+            "flex shrink-0 items-center justify-center rounded-2xl bg-[#243025] text-[#a3e635]",
             isExpanded ? "h-10 w-10" : "w-12 h-12"
           )}>
             <Headphones className={cn(isExpanded ? "h-5 w-5" : "h-6 w-6")} />

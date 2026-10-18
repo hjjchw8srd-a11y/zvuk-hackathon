@@ -145,8 +145,8 @@ export function FavoritesPage() {
 
       {/* Заголовок */}
       <div className="space-y-3">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#242016] border border-[#4a3f24] text-[#FDE047] text-xs font-semibold uppercase tracking-wider">
-          <Heart className="h-3.5 w-3.5 fill-[#FDE047]" />
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#1c231d] border border-[#2e402d] text-[#a3e635] text-xs font-semibold uppercase tracking-wider">
+          <Heart className="h-3.5 w-3.5 fill-[#a3e635]" />
           <span>Ваша коллекция</span>
         </div>
         <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white">
@@ -168,7 +168,7 @@ export function FavoritesPage() {
               : "text-neutral-400 hover:text-white"
           )}
         >
-          <Music className="h-4 w-4 text-[#FDE047] shrink-0" />
+          <Music className="h-4 w-4 text-[#a3e635] shrink-0" />
           <span>Треки ({favorites.length})</span>
         </button>
 
@@ -181,7 +181,7 @@ export function FavoritesPage() {
               : "text-neutral-400 hover:text-white"
           )}
         >
-          <Users className="h-4 w-4 text-[#FDE047] shrink-0" />
+          <Users className="h-4 w-4 text-[#a3e635] shrink-0" />
           <span>Сообщества ({communities.length})</span>
         </button>
       </div>
@@ -200,7 +200,7 @@ export function FavoritesPage() {
                     className={cn(
                       "flex items-center justify-between gap-2.5 sm:gap-3 p-2.5 sm:p-4 rounded-xl border transition-all bg-[#171717]",
                       isPlaying
-                        ? "border-[#443820] bg-[#242016]/90 shadow-md"
+                        ? "border-[#2e402d] bg-[#1c231d]/90 shadow-md"
                         : "border-[#262626] hover:border-neutral-700"
                     )}
                   >
@@ -221,7 +221,7 @@ export function FavoritesPage() {
                           )}
                         >
                           {isPlaying ? (
-                            <Pause className="h-4 w-4 sm:h-5 sm:w-5 text-[#FDE047] fill-[#FDE047]" />
+                            <Pause className="h-4 w-4 sm:h-5 sm:w-5 text-[#a3e635] fill-[#a3e635]" />
                           ) : (
                             <Play className="h-4 w-4 sm:h-5 sm:w-5 text-white fill-white ml-0.5" />
                           )}
@@ -233,7 +233,7 @@ export function FavoritesPage() {
                         <div
                           className={cn(
                             "text-xs sm:text-sm font-bold truncate",
-                            isPlaying ? "text-[#FDE047]" : "text-white"
+                            isPlaying ? "text-[#a3e635]" : "text-white"
                           )}
                         >
                           {track.title}
@@ -287,7 +287,7 @@ export function FavoritesPage() {
               <div className="pt-2">
                 <Link
                   to="/library"
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#282216] border border-[#443820] text-[#FDE047] text-xs font-bold hover:bg-[#342b1b] transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1c231d] border border-[#2e402d] text-[#a3e635] text-xs font-bold hover:bg-[#243025] transition-colors"
                 >
                   <Sparkles className="h-4 w-4" />
                   <span>Открыть медиатеку</span>
@@ -310,7 +310,7 @@ export function FavoritesPage() {
                 >
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#282216] border border-[#443820] text-[#FDE047]">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1c231d] border border-[#2e402d] text-[#a3e635]">
                         <Users className="h-5 w-5" />
                       </div>
                       <span className="text-xs text-neutral-400 font-mono bg-neutral-900 px-2 py-0.5 rounded border border-neutral-800">
@@ -319,7 +319,7 @@ export function FavoritesPage() {
                     </div>
 
                     <div>
-                      <h3 className="text-base font-bold text-white group-hover:text-[#FDE047] transition-colors truncate">
+                      <h3 className="text-base font-bold text-white group-hover:text-[#a3e635] transition-colors truncate">
                         {c.name}
                       </h3>
                       <p className="text-xs text-neutral-400 mt-1">
@@ -332,7 +332,7 @@ export function FavoritesPage() {
                     <button
                       type="button"
                       onClick={() => navigate(`/community/${c.id}`)}
-                      className="w-full inline-flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-[#202020] hover:bg-[#282216] hover:text-[#FDE047] text-xs font-bold text-neutral-200 transition-colors cursor-pointer"
+                      className="w-full inline-flex items-center justify-center gap-2 py-2 px-3 rounded-xl bg-[#202020] hover:bg-[#1c231d] hover:text-[#a3e635] text-xs font-bold text-neutral-200 transition-colors cursor-pointer"
                     >
                       <span>Открыть комнату</span>
                       <ArrowRight className="h-3.5 w-3.5" />
@@ -351,7 +351,7 @@ export function FavoritesPage() {
               <div className="pt-2">
                 <Link
                   to="/"
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#282216] border border-[#443820] text-[#FDE047] text-xs font-bold hover:bg-[#342b1b] transition-colors"
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#1c231d] border border-[#2e402d] text-[#a3e635] text-xs font-bold hover:bg-[#243025] transition-colors"
                 >
                   <ArrowRight className="h-4 w-4" />
                   <span>На главную страницу</span>

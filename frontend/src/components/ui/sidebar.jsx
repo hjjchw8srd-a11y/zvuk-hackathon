@@ -221,7 +221,7 @@ export function SidebarMenuButton({
     "flex items-center transition-colors duration-150 cursor-pointer [&>svg]:shrink-0 border-0",
     open
       ? cn("w-full gap-3 rounded-lg px-3 py-2 text-sm font-medium text-neutral-300 hover:bg-[#262626] hover:text-white [&>svg]:h-5 [&>svg]:w-5", isActive && "bg-[#262626] text-white font-semibold")
-      : cn("w-12 h-12 justify-center p-0 rounded-2xl mx-auto [&>svg]:h-6 [&>svg]:w-6 shadow-xs", isActive ? "bg-[#262419] text-[#FDE047] font-semibold" : "bg-[#1b1b1b] text-neutral-400 hover:text-white hover:bg-[#262626]"),
+      : cn("w-12 h-12 justify-center p-0 rounded-2xl mx-auto [&>svg]:h-6 [&>svg]:w-6 shadow-xs", isActive ? "bg-[#1c231d] text-[#a3e635] font-semibold" : "bg-[#1b1b1b] text-neutral-400 hover:text-white hover:bg-[#262626]"),
     className
   );
 

@@ -17,7 +17,7 @@ const NAV_ITEMS = [
 
 function RhythmLogo({ compact = false }) {
   return (
-    <div className={`flex ${compact ? "h-7 w-7 rounded-lg" : "h-9 w-9 rounded-xl"} shrink-0 items-center justify-center bg-[#FDE047] shadow-xs`}>
+    <div className={`flex ${compact ? "h-7 w-7 rounded-lg" : "h-9 w-9 rounded-xl"} shrink-0 items-center justify-center bg-[#a3e635] shadow-xs`}>
       <svg viewBox="0 0 36 36" fill="none" className={compact ? "h-4 w-4" : "h-6 w-6"} aria-hidden="true">
         <rect x="7.5" y="13" width="3" height="10" rx="1.5" fill="#171717" />
         <rect x="12.5" y="9" width="3" height="18" rx="1.5" fill="#171717" />
@@ -60,11 +60,11 @@ function LayoutInner({ children }) {
             </button>
             <Link to="/" className="flex items-center gap-2 select-none">
               <RhythmLogo compact />
-              <span className="text-xl font-bold tracking-tight text-white flex items-baseline">ритм<span className="text-[#FDE047] text-xl font-black">.</span></span>
+              <span className="text-xl font-bold tracking-tight text-white flex items-baseline">ритм<span className="text-[#a3e635] text-xl font-black">.</span></span>
             </Link>
           </div>
-          {isPlaylistPage && <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#242016] border border-[#4a3f24] text-[#FDE047]">Плейлист</span>}
-          {isPartyPage && <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-yellow-400/20 text-yellow-300 border border-yellow-400/40 flex items-center gap-1 animate-pulse"><span className="w-1.5 h-1.5 rounded-full bg-yellow-400" /> PARTY</span>}
+          {isPlaylistPage && <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#1c231d] border border-[#2e402d] text-[#a3e635]">Плейлист</span>}
+          {isPartyPage && <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/40 flex items-center gap-1 animate-pulse"><span className="w-1.5 h-1.5 rounded-full bg-orange-400" /> PARTY</span>}
         </div>
 
         <div className="md:hidden px-3.5 pt-2">
@@ -76,7 +76,7 @@ function LayoutInner({ children }) {
             <CommunitySwitcher />
           ) : isLibraryPage ? (
             <div className="space-y-3">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#242016] border border-[#4a3f24] text-[#FDE047] text-xs font-semibold uppercase tracking-wider mb-2"><Headphones className="h-3.5 w-3.5" /><span>Студийная фонотека Volna Studio</span></div>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#1c231d] border border-[#2e402d] text-[#a3e635] text-xs font-semibold uppercase tracking-wider mb-2"><Headphones className="h-3.5 w-3.5" /><span>Студийная фонотека Volna Studio</span></div>
               <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-white">Медиатека</h1>
               <p className="text-neutral-400 text-sm sm:text-base max-w-2xl leading-relaxed">Фирменные звуковые дорожки без авторских ограничений. Слушайте и добавляйте их в плейлисты ваших сообществ.</p>
             </div>
@@ -90,11 +90,14 @@ function LayoutInner({ children }) {
         <nav aria-label="Мобильная навигация" className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-[#121212]/95 backdrop-blur-xl border-t border-[#262626] flex items-center justify-around h-[calc(58px+env(safe-area-inset-bottom))] px-1 pb-[env(safe-area-inset-bottom)]">
           {mobileItems.map((item) => {
             const active = item.url === "/" ? location.pathname === "/" : item.url === "/playlist" ? isPlaylistPage : item.url === "/party" ? isPartyPage : location.pathname === item.url || location.pathname.startsWith(`${item.url}/`);
+            const isPartyItem = item.url === "/party";
+            const activeColorClass = isPartyItem ? "text-orange-400" : "text-[#a3e635]";
+            const activeBarClass = isPartyItem ? "bg-orange-400" : "bg-[#a3e635]";
             return (
-              <Link key={item.title} to={item.url} className={cn("relative flex flex-col items-center justify-center flex-1 min-w-0 h-full py-1 text-center transition-colors select-none", active ? "text-[#FDE047]" : "text-neutral-400 hover:text-white")}>
-                <div className="relative"><item.icon className="h-5 w-5" />{item.badge && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />}</div>
+              <Link key={item.title} to={item.url} className={cn("relative flex flex-col items-center justify-center flex-1 min-w-0 h-full py-1 text-center transition-colors select-none", active ? activeColorClass : "text-neutral-400 hover:text-white")}>
+                <div className="relative"><item.icon className="h-5 w-5" />{item.badge && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-orange-500 animate-pulse" />}</div>
                 <span className="text-[9px] sm:text-[10px] font-medium tracking-tight mt-1 truncate max-w-full px-0.5">{item.title}</span>
-                {active && <span className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full bg-[#FDE047]" />}
+                {active && <span className={cn("absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 rounded-full", activeBarClass)} />}
               </Link>
             );
           })}

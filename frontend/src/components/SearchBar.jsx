@@ -283,7 +283,7 @@ export function SearchBar({
         onClick={() => inputRef.current?.focus()}
         className={cn(
           "relative flex items-center w-full h-11 rounded-full bg-[#1a1a1a] hover:bg-[#222222] focus-within:bg-[#222222] transition-all px-4 cursor-text select-none border border-transparent focus-within:border-neutral-700/80 shadow-xs",
-          isOpen && "ring-1 ring-[#FDE047]/40 bg-[#222222]",
+          isOpen && "ring-1 ring-[#a3e635]/40 bg-[#222222]",
           className
         )}
         {...props}
@@ -300,7 +300,7 @@ export function SearchBar({
         {!isCentered && (
           <div className="mr-2.5 flex items-center pointer-events-none">
             {isLoading ? (
-              <Loader2 className="h-4 w-4 shrink-0 text-[#FDE047] animate-spin" />
+              <Loader2 className="h-4 w-4 shrink-0 text-[#a3e635] animate-spin" />
             ) : (
               <Search className="h-4 w-4 shrink-0 text-neutral-400" />
             )}
@@ -325,7 +325,7 @@ export function SearchBar({
 
         {/* Бейдж pg_trgm на десктопе при наличии текста */}
         {query && (
-          <span className="hidden lg:inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#242016] border border-[#443820] text-[#FDE047] select-none mr-1.5">
+          <span className="hidden lg:inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#1c231d] border border-[#2e402d] text-[#a3e635] select-none mr-1.5">
             <Sparkles className="h-2.5 w-2.5" />
             pg_trgm
           </span>
@@ -354,7 +354,7 @@ export function SearchBar({
           {/* Верхняя строка статуса */}
           <div className="px-4 py-2.5 border-b border-neutral-800/80 bg-neutral-900/60 flex items-center justify-between gap-2 text-xs">
             <div className="flex items-center gap-1.5 font-medium text-neutral-300">
-              <Sparkles className="h-3.5 w-3.5 text-[#FDE047]" />
+              <Sparkles className="h-3.5 w-3.5 text-[#a3e635]" />
               <span>
                 {query.trim()
                   ? `Нечеткий поиск (pg_trgm): «${query.trim()}»`
@@ -364,7 +364,7 @@ export function SearchBar({
             <div className="flex items-center gap-2">
               {isLoading && (
                 <span className="text-neutral-400 flex items-center gap-1 text-[11px]">
-                  <Loader2 className="h-3 w-3 animate-spin text-[#FDE047]" />
+                  <Loader2 className="h-3 w-3 animate-spin text-[#a3e635]" />
                   поиск...
                 </span>
               )}
@@ -395,7 +395,7 @@ export function SearchBar({
           <div className="max-h-[360px] sm:max-h-[420px] overflow-y-auto divide-y divide-neutral-800/50 p-1.5">
             {isLoading && results.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-neutral-400">
-                <Loader2 className="h-7 w-7 animate-spin text-[#FDE047] mb-2.5" />
+                <Loader2 className="h-7 w-7 animate-spin text-[#a3e635] mb-2.5" />
                 <p className="text-xs">Выполняется триграммный поиск через pg_trgm...</p>
               </div>
             ) : results.length > 0 ? (
@@ -411,7 +411,7 @@ export function SearchBar({
                     className={cn(
                       "group flex items-center justify-between gap-3 p-2.5 sm:p-3 rounded-xl transition-all cursor-pointer",
                       isPlayingThis
-                        ? "bg-[#242016]/80 border border-[#443820]/60"
+                        ? "bg-[#1c231d]/80 border border-[#2e402d]/60"
                         : "hover:bg-[#202020]"
                     )}
                   >
@@ -456,7 +456,7 @@ export function SearchBar({
                       {/* Текстовая информация */}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <p className="text-sm font-bold text-white truncate group-hover:text-[#FDE047] transition-colors">
+                          <p className="text-sm font-bold text-white truncate group-hover:text-[#a3e635] transition-colors">
                             {track.title}
                           </p>
 
@@ -468,7 +468,7 @@ export function SearchBar({
                                 sim >= 0.85
                                   ? "bg-emerald-950/70 border-emerald-800/70 text-emerald-300"
                                   : sim >= 0.4
-                                  ? "bg-yellow-950/70 border-yellow-800/70 text-yellow-300"
+                                  ? "bg-lime-950/70 border-lime-800/70 text-lime-300"
                                   : "bg-neutral-800 border-neutral-700 text-neutral-400"
                               )}
                               title={`Триграммное сходство pg_trgm: ${Math.round(sim * 100)}%`}
@@ -507,7 +507,7 @@ export function SearchBar({
                         className={cn(
                           "flex h-8 w-8 items-center justify-center rounded-lg transition-colors cursor-pointer",
                           isPlayingThis
-                            ? "bg-[#FDE047] text-neutral-950 hover:bg-[#FEF08A]"
+                            ? "bg-[#a3e635] text-neutral-950 hover:bg-[#bef264]"
                             : "bg-neutral-800 hover:bg-neutral-700 text-neutral-200 hover:text-white"
                         )}
                         title={isPlayingThis ? "Пауза" : "Слушать"}
@@ -526,7 +526,7 @@ export function SearchBar({
                         className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-[#262626] border border-neutral-700/70 hover:border-neutral-600 text-xs font-semibold text-neutral-200 hover:text-white transition-all cursor-pointer"
                         title="Добавить в плейлист сообщества"
                       >
-                        <Plus className="h-3.5 w-3.5 text-[#FDE047]" />
+                        <Plus className="h-3.5 w-3.5 text-[#a3e635]" />
                         <span className="hidden sm:inline">В плейлист</span>
                       </button>
                     </div>
@@ -563,7 +563,7 @@ export function SearchBar({
         <DialogContent className="max-w-md bg-[#181818] border border-neutral-800 text-white rounded-2xl">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold flex items-center gap-2">
-              <Plus className="h-5 w-5 text-[#FDE047]" />
+              <Plus className="h-5 w-5 text-[#a3e635]" />
               Добавить в плейлист
             </DialogTitle>
             <DialogDescription className="text-neutral-400 text-xs sm:text-sm">
@@ -602,7 +602,7 @@ export function SearchBar({
 
             {isLoadingCommunities ? (
               <div className="flex items-center justify-center py-6 text-neutral-400">
-                <Loader2 className="h-5 w-5 animate-spin text-[#FDE047] mr-2" />
+                <Loader2 className="h-5 w-5 animate-spin text-[#a3e635] mr-2" />
                 <span className="text-xs">Загрузка сообществ...</span>
               </div>
             ) : communities.length > 0 ? (
@@ -616,7 +616,7 @@ export function SearchBar({
                     className="w-full flex items-center justify-between p-2.5 rounded-xl bg-[#202020] hover:bg-[#282828] border border-neutral-800 hover:border-neutral-700 transition-colors text-left cursor-pointer group disabled:opacity-50"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="h-8 w-8 rounded-lg bg-neutral-800 flex items-center justify-center text-neutral-300 group-hover:text-[#FDE047] transition-colors shrink-0">
+                      <div className="h-8 w-8 rounded-lg bg-neutral-800 flex items-center justify-center text-neutral-300 group-hover:text-[#a3e635] transition-colors shrink-0">
                         <Users className="h-4 w-4" />
                       </div>
                       <div className="min-w-0">
@@ -627,7 +627,7 @@ export function SearchBar({
                       </div>
                     </div>
 
-                    <span className="text-xs font-medium text-[#FDE047] opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                    <span className="text-xs font-medium text-[#a3e635] opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
                       Добавить →
                     </span>
                   </button>
@@ -638,7 +638,7 @@ export function SearchBar({
                 <p className="text-xs text-neutral-400">У вас пока нет активных сообществ</p>
                 <a
                   href="/playlist"
-                  className="inline-flex items-center gap-1.5 text-xs text-[#FDE047] font-semibold hover:underline"
+                  className="inline-flex items-center gap-1.5 text-xs text-[#a3e635] font-semibold hover:underline"
                 >
                   Перейти к плейлистам
                   <ExternalLink className="h-3 w-3" />

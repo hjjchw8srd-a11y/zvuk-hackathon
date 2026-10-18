@@ -174,7 +174,7 @@ export function LibraryPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Поиск по названию или описанию..."
-              className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#171717] border border-[#262626] text-base sm:text-sm text-white placeholder-neutral-500 outline-none focus:border-[#FDE047] transition-colors"
+              className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-[#171717] border border-[#262626] text-base sm:text-sm text-white placeholder-neutral-500 outline-none focus:border-[#a3e635] transition-colors"
             />
           </div>
 
@@ -186,7 +186,7 @@ export function LibraryPage() {
                 className={cn(
                   "px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer shrink-0",
                   selectedGenre === g
-                    ? "bg-[#282216] border border-[#443820] text-[#FDE047]"
+                    ? "bg-[#1c231d] border border-[#2e402d] text-[#a3e635]"
                     : "bg-[#171717] border border-[#262626] text-neutral-400 hover:text-white"
                 )}
               >
@@ -200,7 +200,7 @@ export function LibraryPage() {
       {/* Индикатор загрузки */}
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-20 text-neutral-400">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#FDE047] border-t-transparent mb-3" />
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#a3e635] border-t-transparent mb-3" />
           <p className="text-xs">Загрузка треков из базы данных...</p>
         </div>
       ) : (
@@ -214,7 +214,7 @@ export function LibraryPage() {
                 className={cn(
                   "rounded-2xl border p-4 sm:p-5 flex flex-col justify-between transition-all group bg-[#171717]",
                   isPlaying
-                    ? "border-[#443820] shadow-lg shadow-[#FDE047]/10 bg-gradient-to-b from-[#262116] to-[#171717]"
+                    ? "border-[#2e402d] shadow-lg shadow-[#a3e635]/10 bg-gradient-to-b from-[#1c231d] to-[#171717]"
                     : "border-[#262626] hover:border-neutral-700"
                 )}
               >
@@ -236,7 +236,7 @@ export function LibraryPage() {
                         )}
                       >
                         {isPlaying ? (
-                          <Pause className="h-5 w-5 sm:h-6 sm:w-6 text-[#FDE047] fill-[#FDE047]" />
+                          <Pause className="h-5 w-5 sm:h-6 sm:w-6 text-[#a3e635] fill-[#a3e635]" />
                         ) : (
                           <Play className="h-5 w-5 sm:h-6 sm:w-6 text-white fill-white ml-0.5" />
                         )}
@@ -245,7 +245,7 @@ export function LibraryPage() {
 
                     {/* Бейдж жанра и длительность */}
                     <div className="flex flex-col items-end gap-1">
-                      <span className="text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#242016] border border-[#4a3f24] text-[#FDE047]">
+                      <span className="text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#1c231d] border border-[#2e402d] text-[#a3e635]">
                         {track.genre}
                       </span>
                       <span className="text-xs text-neutral-500 tabular-nums font-mono">
@@ -256,7 +256,7 @@ export function LibraryPage() {
 
                   {/* Инфо о треке */}
                   <div>
-                    <h3 className="text-base sm:text-lg font-bold text-white group-hover:text-[#FDE047] transition-colors truncate">
+                    <h3 className="text-base sm:text-lg font-bold text-white group-hover:text-[#a3e635] transition-colors truncate">
                       {track.title}
                     </h3>
                     <p className="text-xs text-neutral-400 mt-0.5 truncate">{track.artist}</p>
@@ -274,7 +274,7 @@ export function LibraryPage() {
                     className={cn(
                       "flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer",
                       isPlaying
-                        ? "bg-[#282216] text-[#FDE047]"
+                        ? "bg-[#1c231d] text-[#a3e635]"
                         : "bg-[#202020] text-neutral-300 hover:text-white"
                     )}
                   >
@@ -294,7 +294,7 @@ export function LibraryPage() {
                   <button
                     type="button"
                     onClick={() => handleOpenAddModal(track)}
-                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 px-3 py-2 sm:py-1.5 rounded-lg bg-[#282216] border border-[#443820] text-[#FDE047] text-xs font-semibold hover:bg-[#342b1b] transition-colors cursor-pointer whitespace-nowrap"
+                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1 px-3 py-2 sm:py-1.5 rounded-lg bg-[#1c231d] border border-[#2e402d] text-[#a3e635] text-xs font-semibold hover:bg-[#243025] transition-colors cursor-pointer whitespace-nowrap"
                     title="Добавить в плейлист комнаты"
                   >
                     <FolderPlus className="h-3.5 w-3.5" />
@@ -320,10 +320,10 @@ export function LibraryPage() {
       {/* Модальное окно выбора сообщества для добавления */}
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
         <DialogContent className="sm:max-w-[440px] bg-[#171717] border-[#262626] text-white">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#282216] border border-[#443820] text-[#FDE047]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#1c231d] border border-[#2e402d] text-[#a3e635]">
             <FolderPlus className="h-5 w-5" />
           </div>
-          <p className="text-[11px] font-bold uppercase tracking-widest text-[#FDE047] m-0">
+          <p className="text-[11px] font-bold uppercase tracking-widest text-[#a3e635] m-0">
             ДОБАВЛЕНИЕ В ОЧЕРЕДЬ
           </p>
           <DialogTitle className="text-xl font-bold text-white m-0">
@@ -341,17 +341,17 @@ export function LibraryPage() {
                 <button
                   key={c.id}
                   onClick={() => handleAddToCommunity(c.id, c.name)}
-                  className="flex items-center justify-between p-3 rounded-xl bg-[#202020] border border-neutral-800 hover:border-[#443820] hover:bg-[#282216] transition-all text-left group cursor-pointer"
+                  className="flex items-center justify-between p-3 rounded-xl bg-[#202020] border border-neutral-800 hover:border-[#2e402d] hover:bg-[#1c231d] transition-all text-left group cursor-pointer"
                 >
                   <div className="min-w-0">
-                    <div className="text-sm font-bold text-white group-hover:text-[#FDE047] transition-colors truncate">
+                    <div className="text-sm font-bold text-white group-hover:text-[#a3e635] transition-colors truncate">
                       {c.name}
                     </div>
                     <div className="text-xs text-neutral-500">
                       Код: {c.invite_code || "ZVUK26"}
                     </div>
                   </div>
-                  <Plus className="h-4 w-4 text-neutral-400 group-hover:text-[#FDE047] transition-colors shrink-0" />
+                  <Plus className="h-4 w-4 text-neutral-400 group-hover:text-[#a3e635] transition-colors shrink-0" />
                 </button>
               ))
             ) : (
