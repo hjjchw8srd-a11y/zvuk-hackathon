@@ -559,8 +559,12 @@ export function PlaylistPage() {
         }
       })
       .catch(() => {});
+  }, [user?.id]);
 
-    // Загрузка снимков топа прошлых ротаций
+  const fetchTopHistory = useCallback((roomId) => {
+    if (!roomId) return;
+    const token = localStorage.getItem("token");
+    const headers = token ? { Authorization: `Bearer ${token}` } : {};
     fetch(`/api/communities/${roomId}/top-history`, { headers })
       .then((r) => (r.ok ? r.json() : null))
       .then((snaps) => {
@@ -576,12 +580,13 @@ export function PlaylistPage() {
         }
       })
       .catch(() => {});
-  }, [user?.id]);
+  }, []);
 
   useEffect(() => {
     if (!currentRoomId) return;
 
     fetchCommunityData(currentRoomId);
+    fetchTopHistory(currentRoomId);
 
     // Подключение к WebSocket для мгновенных обновлений в реальном времени
     let ws = null;
@@ -635,6 +640,9 @@ export function PlaylistPage() {
                   }
                 }
               }
+              if (data.action === "rotation") {
+                fetchTopHistory(currentRoomId);
+              }
               fetchCommunityData(currentRoomId);
             }
           } catch {}
@@ -658,10 +666,10 @@ export function PlaylistPage() {
 
     connectWs();
 
-    // Регулярный опрос для надежной доставки обновлений
+    // Запасной опрос раз в 6 секунд (основные обновления приходят мгновенно по WebSocket)
     const pollInterval = setInterval(() => {
       fetchCommunityData(currentRoomId);
-    }, 2500);
+    }, 6000);
 
     return () => {
       isMounted = false;
@@ -672,7 +680,7 @@ export function PlaylistPage() {
         ws.close();
       }
     };
-  }, [currentRoomId, fetchCommunityData]);
+  }, [currentRoomId, fetchCommunityData, fetchTopHistory]);
 
   useEffect(() => {
     document.title = "Плейлист · ритм.";
