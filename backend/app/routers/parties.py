@@ -36,6 +36,16 @@ from app.routers.communities import LIBRARY, INVITE_ALPHABET
 router = APIRouter(prefix="/api/parties", tags=["parties"])
 
 
+def _elapsed_seconds(started_at: datetime | None) -> float:
+    if started_at is None:
+        return 0.0
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=timezone.utc)
+    else:
+        started_at = started_at.astimezone(timezone.utc)
+    return max(0.0, (datetime.now(timezone.utc) - started_at).total_seconds())
+
+
 # ── ConnectionManager для изолированных сокетов вечеринок ────────────────────
 class PartyConnectionManager:
     def __init__(self):
@@ -468,7 +478,7 @@ def get_party_state(
 
     duration = 0
     if party.is_active and party.started_at:
-        duration = int((datetime.now(timezone.utc) - party.started_at).total_seconds())
+        duration = int(_elapsed_seconds(party.started_at))
 
     return {
         "party": {

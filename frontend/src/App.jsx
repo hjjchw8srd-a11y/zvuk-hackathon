@@ -8,6 +8,7 @@ import { PartyPage } from "./pages/PartyPage.jsx";
 import AuthPage from "./pages/AuthPage.jsx";
 import SuperAdminPage from "./pages/SuperAdminPage.jsx";
 import Layout from "./components/Layout.jsx";
+import { Toaster } from "react-hot-toast";
 import { AuthProvider, useAuth } from "./lib/auth.jsx";
 
 function ProtectedRoute({ children }) {
@@ -188,6 +189,17 @@ export default function App() {
   return (
     <AuthProvider>
       <AppRoutes />
+      <Toaster
+        position="bottom-right"
+        toastOptions={{
+          duration: 5000,
+        }}
+        containerStyle={{
+          bottom: 24,
+          right: 24,
+          zIndex: 99999,
+        }}
+      />
     </AuthProvider>
   );
 }

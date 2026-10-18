@@ -209,13 +209,13 @@ export function Popup({
       {/* Вариант 3: Приглашение друзей на волну */}
       {isInvite && (
         <DialogContent className={cn("sm:max-w-[480px] text-left bg-[#171717] border-neutral-800 max-h-[90vh] overflow-y-auto", className)}>
-          {/* Иконка Share в зеленом блоке */}
-          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#233525] border border-[#2e4730] text-[#a3e635]">
+          {/* Иконка Share в золотистом блоке */}
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#242016] border border-[#4a3f24] text-[#FDE047]">
             <Share2 className="h-5 w-5" />
           </div>
 
           {/* Тег ВМЕСТЕ ГРОМЧЕ */}
-          <p className="text-xs font-bold uppercase tracking-wider text-[#a3e635] -mt-1 m-0">
+          <p className="text-xs font-bold uppercase tracking-wider text-[#FDE047] -mt-1 m-0">
             {badge || "ВМЕСТЕ ГРОМЧЕ"}
           </p>
 
@@ -237,18 +237,18 @@ export function Popup({
               <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
                 Код сообщества
               </label>
-              <div className="flex items-center justify-between rounded-xl bg-[#202521] border border-[#2a342c] px-4 py-2.5">
-                <span className="font-bold text-lg tracking-widest text-white">
+              <div className="flex items-center justify-between rounded-xl bg-[#242016] border border-[#4a3f24] px-4 py-2.5">
+                <span className="font-bold text-lg tracking-widest text-[#FDE047]">
                   {communityCode}
                 </span>
                 <button
                   type="button"
                   onClick={() => copyToClipboard(communityCode, "code")}
-                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#28322a] text-neutral-300 hover:bg-[#324035] hover:text-white transition-colors"
+                  className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#2e2718] text-[#FDE047] hover:bg-[#382f1d] hover:text-white transition-colors cursor-pointer"
                   title="Скопировать код"
                 >
                   {copiedCode ? (
-                    <Check className="h-4 w-4 text-[#a3e635]" />
+                    <Check className="h-4 w-4 text-[#FDE047]" />
                   ) : (
                     <Copy className="h-4 w-4" />
                   )}
@@ -261,7 +261,7 @@ export function Popup({
               <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
                 Адрес сервера (для телефона — IP ноутбука)
               </label>
-              <div className="rounded-xl bg-[#202521] border border-[#2a342c] px-3.5 py-2.5 text-sm text-neutral-300 font-mono">
+              <div className="rounded-xl bg-[#1c1c1c] border border-[#2e2e2e] px-3.5 py-2.5 text-sm text-neutral-300 font-mono">
                 {effectiveServerAddress}
               </div>
             </div>
@@ -271,18 +271,18 @@ export function Popup({
               <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
                 Ссылка для приглашения
               </label>
-              <div className="flex items-center justify-between gap-2 rounded-xl bg-[#202521] border border-[#2a342c] px-3.5 py-2 text-sm text-neutral-300">
-                <span className="truncate font-mono text-xs text-neutral-300">
+              <div className="flex items-center justify-between gap-2 rounded-xl bg-[#242016] border border-[#4a3f24] px-3.5 py-2 text-sm text-neutral-300">
+                <span className="truncate font-mono text-xs text-[#FDE047]">
                   {resolvedInviteLink}
                 </span>
                 <button
                   type="button"
                   onClick={() => copyToClipboard(resolvedInviteLink, "link")}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#28322a] text-neutral-300 hover:bg-[#324035] hover:text-white transition-colors"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#2e2718] text-[#FDE047] hover:bg-[#382f1d] hover:text-white transition-colors cursor-pointer"
                   title="Скопировать ссылку"
                 >
                   {copiedLink ? (
-                    <Check className="h-4 w-4 text-[#a3e635]" />
+                    <Check className="h-4 w-4 text-[#FDE047]" />
                   ) : (
                     <Copy className="h-4 w-4" />
                   )}

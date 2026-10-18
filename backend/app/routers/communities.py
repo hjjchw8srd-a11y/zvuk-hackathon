@@ -155,6 +155,28 @@ AUDIO_MIME_TYPES = {
     "flac": "audio/flac",
 }
 
+
+def _utc_datetime(value: datetime | None) -> datetime | None:
+    """Normalize database datetimes to timezone-aware UTC values.
+
+    SQLite drops timezone information even for ``DateTime(timezone=True)``.
+    Normalising values here keeps SQLite and PostgreSQL behaviour identical.
+    """
+
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _elapsed_seconds(started_at: datetime | None, *, until: datetime | None = None) -> float:
+    started = _utc_datetime(started_at)
+    if started is None:
+        return 0.0
+    endpoint = _utc_datetime(until) or datetime.now(timezone.utc)
+    return max(0.0, (endpoint - started).total_seconds())
+
 LIBRARY = [
     {"key": "bustin", "title": "Bustin Loose With Lead", "artist": "Audionautix", "genre": "Рок", "duration_seconds": 128, "color": "#e05638", "file": "bustin_loose.mp3"},
     {"key": "funk90", "title": "90 Seconds Of Funk", "artist": "Audionautix", "genre": "Фанк", "duration_seconds": 91, "color": "#f59e0b", "file": "90_seconds_of_funk.mp3"},
@@ -543,6 +565,7 @@ def _community_state(db: Session, room: Room, membership: RoomMember, user: User
                 "is_favorite": track.id in favorites,
                 "license_type": getattr(track, "license_type", "CC / User Upload"),
                 "dmca_reports_count": getattr(track, "dmca_reports_count", 0),
+                "is_admin_banned": bool(getattr(track, "is_admin_banned", False)),
             }
         )
 
@@ -602,6 +625,7 @@ def _community_state(db: Session, room: Room, membership: RoomMember, user: User
     now_utc = datetime.now(timezone.utc)
     playing_started_at = None
     elapsed_seconds = 0.0
+    playback_state = "paused"
     if playing_track:
         playing_queue_item = db.scalar(
             select(QueueItem).where(
@@ -611,8 +635,11 @@ def _community_state(db: Session, room: Room, membership: RoomMember, user: User
             )
         )
         if playing_queue_item and playing_queue_item.started_at:
-            playing_started_at = playing_queue_item.started_at.isoformat()
-            elapsed_seconds = max(0.0, (now_utc - playing_queue_item.started_at).total_seconds())
+            started_at = _utc_datetime(playing_queue_item.started_at)
+            paused_at = _utc_datetime(playing_queue_item.completed_at)
+            playing_started_at = started_at.isoformat() if started_at else None
+            elapsed_seconds = _elapsed_seconds(started_at, until=paused_at or now_utc)
+            playback_state = "paused" if paused_at else "playing"
 
     return {
         "community": {
@@ -631,11 +658,11 @@ def _community_state(db: Session, room: Room, membership: RoomMember, user: User
             "is_active": room.party_is_active,
             "name": room.party_name or "Вечеринка",
             "started_at": room.party_started_at.isoformat() if room.party_started_at else None,
-            "duration_seconds": int((datetime.now(timezone.utc) - room.party_started_at).total_seconds()) if (room.party_is_active and room.party_started_at) else 0,
+            "duration_seconds": int(_elapsed_seconds(room.party_started_at)) if (room.party_is_active and room.party_started_at) else 0,
         },
         "playback": {
             "current_track_id": playing_track["id"] if playing_track else None,
-            "state": "playing" if playing_track else "paused",
+            "state": playback_state,
             "started_at": playing_started_at,
             "server_time": now_utc.isoformat(),
             "elapsed_seconds": round(elapsed_seconds, 2),
@@ -790,6 +817,97 @@ def moderation_history(
         .limit(40)
     ).all()
     return {"logs": [{"action": log.action, "details": log.details, "created_at": log.created_at, "display_name": actor.display_name if actor else "Система"} for log, actor in logs]}
+
+
+def _format_library_entry(entry: dict) -> dict:
+    dur = entry.get("duration_seconds", 45)
+    minutes = dur // 60
+    seconds = dur % 60
+    file_name = entry.get("file")
+    audio_url = f"/audio/{file_name}" if file_name else None
+    return {
+        "id": entry["key"],
+        "key": entry["key"],
+        "library_key": entry["key"],
+        "title": entry["title"],
+        "artist": entry["artist"],
+        "genre": entry.get("genre", "Разное"),
+        "duration": f"{minutes}:{seconds:02d}",
+        "duration_seconds": dur,
+        "color": entry.get("color", "#FDE047"),
+        "gradient": "from-amber-500 to-yellow-600",
+        "description": entry.get("description", "Оригинальная дорожка Volna Studio без авторских ограничений."),
+        "file": file_name,
+        "audio_url": audio_url,
+        "source_type": "library",
+    }
+
+
+@router.get("/library")
+def get_library(
+    genre: str | None = None,
+    search: str | None = None,
+):
+    items = list(LIBRARY)
+    if genre and genre != "Все жанры":
+        items = [t for t in items if t.get("genre") == genre]
+    if search and search.strip():
+        s = search.strip().casefold()
+        items = [
+            t for t in items
+            if s in t.get("title", "").casefold()
+            or s in t.get("artist", "").casefold()
+            or s in t.get("genre", "").casefold()
+            or s in t.get("key", "").casefold()
+        ]
+    all_genres = ["Все жанры"] + sorted(list({t.get("genre") for t in LIBRARY if t.get("genre")}))
+    return {
+        "tracks": [_format_library_entry(t) for t in items],
+        "genres": all_genres,
+    }
+
+
+@router.get("/tracks/search")
+@router.get("/search")
+def search_tracks(
+    q: str = Query("", description="Поисковый запрос"),
+    limit: int = Query(20, ge=1, le=100),
+    genre: str | None = None,
+):
+    clean_q = (q or "").strip().casefold()
+    items = list(LIBRARY)
+    if genre and genre != "Все жанры":
+        items = [t for t in items if t.get("genre") == genre]
+
+    if clean_q:
+        scored = []
+        for t in items:
+            title = t.get("title", "").casefold()
+            artist = t.get("artist", "").casefold()
+            genre_name = t.get("genre", "").casefold()
+            key = t.get("key", "").casefold()
+            if clean_q == key or clean_q == title:
+                score = 1.0
+            elif clean_q in title or clean_q in artist or clean_q in genre_name or clean_q in key:
+                score = 0.8
+            else:
+                score = max(
+                    difflib.SequenceMatcher(None, clean_q, title).ratio(),
+                    difflib.SequenceMatcher(None, clean_q, artist).ratio(),
+                    difflib.SequenceMatcher(None, clean_q, genre_name).ratio(),
+                )
+            if score >= 0.35:
+                scored.append((score, t))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        matched = [t for _, t in scored[:limit]]
+    else:
+        matched = items[:limit]
+
+    return {
+        "query": q,
+        "count": len(matched),
+        "tracks": [_format_library_entry(t) for t in matched],
+    }
 
 
 @router.post("/communities/{room_id}/tracks/library", status_code=201)
@@ -1069,6 +1187,8 @@ def track_audio(
     db: Session = Depends(get_db),
 ):
     track = db.get(Track, track_id)
+    if track is not None and getattr(track, "is_admin_banned", False):
+        raise HTTPException(status_code=403, detail="Трек заблокирован администратором платформы")
     if track is None or track.room_id != room_id or track.source_type != TrackSource.UPLOAD or not track.storage_key:
         raise HTTPException(status_code=404, detail="Аудиофайл не найден")
     path = (_uploads_dir() / track.storage_key).resolve()
@@ -1147,6 +1267,11 @@ def moderate_track(
     action = payload.action or {"approved": "approve", "rejected": "reject", "banned": "ban"}.get(payload.status or "")
     if action not in {"approve", "reject", "ban", "remove", "restore"}:
         raise HTTPException(status_code=400, detail="Недопустимое действие")
+    if action in {"approve", "restore"} and getattr(track, "is_admin_banned", False) and not user.is_superuser:
+        raise HTTPException(
+            status_code=403,
+            detail="Трек заблокирован администратором платформы; модератор не может его восстановить",
+        )
     item = _queue_item(db, _active_round(db, room_id), track_id)
     if action in {"approve", "restore"}:
         track.moderation_status = ModerationStatus.APPROVED
@@ -1186,8 +1311,17 @@ def play_track(
         raise HTTPException(status_code=404, detail="Трек не найден в очереди")
     current = db.scalar(select(QueueItem).where(QueueItem.round_id == playlist_round.id, QueueItem.state == QueueItemState.PLAYING).with_for_update())
     if current is not None and current.id != item.id:
+        completed_at = datetime.now(timezone.utc)
         current.state = QueueItemState.PLAYED
-        current.completed_at = datetime.now(timezone.utc)
+        current.completed_at = completed_at
+        history = db.scalar(
+            select(PlaybackHistory).where(
+                PlaybackHistory.queue_item_id == current.id,
+                PlaybackHistory.queue_version == current.version,
+            )
+        )
+        if history is not None:
+            history.completed_at = completed_at
         db.flush()
     now_utc = datetime.now(timezone.utc)
     if item.state != QueueItemState.PLAYING:
@@ -1197,9 +1331,17 @@ def play_track(
         item.completed_at = None
         db.add(PlaybackHistory(queue_item_id=item.id, played_by_user_id=user.id, queue_version=item.version, started_at=item.started_at))
         room.queue_version += 1
+    elif item.completed_at is not None:
+        # Keep the queue item current while paused.  On resume move the
+        # start time so every client continues from the same elapsed position.
+        paused_elapsed = _elapsed_seconds(item.started_at, until=item.completed_at)
+        item.started_at = now_utc - timedelta(seconds=paused_elapsed)
+        item.completed_at = None
+        room.queue_version += 1
+    started_at = _utc_datetime(item.started_at) or now_utc
     db.commit()
-    started_at_str = item.started_at.isoformat() if item.started_at else now_utc.isoformat()
-    elapsed = max(0.0, (now_utc - item.started_at).total_seconds()) if item.started_at else 0.0
+    started_at_str = started_at.isoformat()
+    elapsed = _elapsed_seconds(started_at, until=now_utc)
     playback_extra = {
         "track_id": str(track_id),
         "state": "playing",
@@ -1224,16 +1366,23 @@ def pause_track(
     room = db.scalar(select(Room).where(Room.id == room_id).with_for_update())
     playlist_round = _active_round(db, room_id)
     current = db.scalar(select(QueueItem).where(QueueItem.round_id == playlist_round.id, QueueItem.state == QueueItemState.PLAYING).with_for_update())
-    if current is not None:
-        current.state = QueueItemState.QUEUED
-        room.queue_version += 1
     item = _queue_item(db, playlist_round, track_id)
-    if item is not None and item.state == QueueItemState.PLAYING:
-        item.state = QueueItemState.QUEUED
+    if current is None or item is None or current.id != item.id:
+        raise HTTPException(status_code=409, detail="Этот трек уже не воспроизводится")
+    if current.completed_at is None:
+        current.completed_at = datetime.now(timezone.utc)
         room.queue_version += 1
+    elapsed = _elapsed_seconds(current.started_at, until=current.completed_at)
     db.commit()
-    manager.notify_room(room_id, action="playback", extra={"track_id": str(track_id), "state": "paused"})
-    return {"ok": True, "state": "paused", "track_id": str(track_id)}
+    playback_extra = {
+        "track_id": str(track_id),
+        "state": "paused",
+        "started_at": (_utc_datetime(current.started_at) or datetime.now(timezone.utc)).isoformat(),
+        "server_time": datetime.now(timezone.utc).isoformat(),
+        "elapsed_seconds": round(elapsed, 2),
+    }
+    manager.notify_room(room_id, action="playback", extra=playback_extra)
+    return {"ok": True, **playback_extra}
 
 
 @router.post("/communities/{room_id}/tracks/{track_id}/complete")
@@ -1395,7 +1544,7 @@ def party_status(
 
     duration = 0
     if room.party_is_active and room.party_started_at:
-        duration = int((datetime.now(timezone.utc) - room.party_started_at).total_seconds())
+        duration = int(_elapsed_seconds(room.party_started_at))
 
     return {
         "is_active": room.party_is_active,

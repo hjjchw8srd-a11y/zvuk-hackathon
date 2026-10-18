@@ -216,12 +216,21 @@ class SoundEngine {
       }
       this.filters[this.filters.length - 1].connect(this.master);
 
-      // Setup audio element and connect source if already created
-      this.attachAudioElementSource();
+      // Do not route the media element through a suspended AudioContext.
+      // A suspended graph is silent even when HTMLMediaElement.play() itself
+      // succeeds. Until a real user gesture unlocks Web Audio, the element
+      // therefore keeps using the browser's normal (audible) output path.
+      if (ctx.state === "running") {
+        this.attachAudioElementSource();
+      }
     }
 
     if (this.context.state === "suspended") {
-      this.context.resume().catch(() => {});
+      this.context.resume()
+        .then(() => this.attachAudioElementSource())
+        .catch(() => {});
+    } else if (this.context.state === "running") {
+      this.attachAudioElementSource();
     }
 
     return this.context;
@@ -234,8 +243,18 @@ class SoundEngine {
     // Enable CORS to avoid Web Audio API cross-origin security restrictions
     audio.crossOrigin = "anonymous";
     audio.preload = "auto";
-    audio.volume = 1.0; // Volume is managed via Web Audio master GainNode
+    // Before Web Audio is unlocked, volume is managed directly on the media
+    // element. Once it is attached, the master GainNode takes over.
+    audio.volume = this.sourceNode ? 1.0 : this.volume;
     audio.addEventListener("ended", () => this.finish());
+    audio.addEventListener("playing", () => {
+      if (this.targetSyncOffset !== null) {
+        const live = this.getLiveElapsed();
+        if (Math.abs(audio.currentTime - live) > 0.5) {
+          this.seekAudio(audio, live);
+        }
+      }
+    });
     audio.addEventListener("error", (e) => {
       console.warn("Audio playback error, falling back to synth:", e);
       if (this.isPlaying) this.startSynth();
@@ -247,7 +266,7 @@ class SoundEngine {
   }
 
   attachAudioElementSource() {
-    if (!this.context || !this.audio || this.sourceNode) return;
+    if (!this.context || this.context.state !== "running" || !this.audio || this.sourceNode) return;
     try {
       this.sourceNode = this.context.createMediaElementSource(this.audio);
       if (this.filters.length > 0) {
@@ -255,6 +274,7 @@ class SoundEngine {
       } else if (this.master) {
         this.sourceNode.connect(this.master);
       }
+      this.audio.volume = 1.0;
     } catch (err) {
       console.warn("Could not create MediaElementSourceNode:", err);
     }
@@ -343,6 +363,7 @@ class SoundEngine {
         await this.context.resume();
       } catch {}
     }
+    this.attachAudioElementSource();
 
     if (this.currentTrack && this.isPlaying) {
       const liveSeconds = this.getLiveElapsed();
@@ -352,6 +373,9 @@ class SoundEngine {
           await this.audio.play();
           this.isBlockedByAutoplay = false;
           this.stopSynth();
+          if (liveSeconds > 0) {
+            this.seekAudio(this.audio, liveSeconds);
+          }
         } catch (e) {
           console.warn("Audio unlock play failed:", e);
         }

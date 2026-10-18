@@ -11,6 +11,7 @@ SuperAdmin platform management router:
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -21,7 +22,9 @@ from app.auth import require_superuser
 from app.database import get_db
 from app.models import (
     BlacklistedTrack,
+    ModerationStatus,
     QueueItem,
+    QueueItemState,
     Room,
     RoomMember,
     Track,
@@ -80,6 +83,9 @@ def get_all_tracks(
                 "normalized_signature": track.normalized_signature,
                 "license_type": track.license_type,
                 "dmca_reports_count": track.dmca_reports_count,
+                "is_admin_banned": track.is_admin_banned,
+                "admin_banned_by_user_id": track.admin_banned_by_user_id,
+                "admin_banned_at": track.admin_banned_at.isoformat() if track.admin_banned_at else None,
                 "moderation_status": track.moderation_status.value if hasattr(track.moderation_status, "value") else str(track.moderation_status),
                 "source_type": track.source_type.value if hasattr(track.source_type, "value") else str(track.source_type),
                 "storage_key": track.storage_key,
@@ -105,7 +111,7 @@ def ban_track_dmca(
     user: User = Depends(require_superuser),
     db: Session = Depends(get_db),
 ) -> dict[str, Any]:
-    """Ban track for DMCA violation, add to blacklist, remove file and record."""
+    """Apply a durable platform ban that room moderators cannot undo."""
     track = db.get(Track, track_id)
     if track is None:
         raise HTTPException(status_code=404, detail="Трек не найден")
@@ -135,7 +141,16 @@ def ban_track_dmca(
 
     room_id = track.room_id
     track_title = track.title
-    db.delete(track)
+    track.moderation_status = ModerationStatus.BANNED
+    track.is_admin_banned = True
+    track.admin_banned_by_user_id = user.id
+    track.admin_banned_at = datetime.now(timezone.utc)
+    for item in db.scalars(select(QueueItem).where(QueueItem.track_id == track.id)).all():
+        item.state = QueueItemState.REMOVED
+        item.version += 1
+    room = db.get(Room, room_id) if room_id else None
+    if room is not None:
+        room.queue_version += 1
     db.commit()
 
     if room_id:
@@ -143,7 +158,7 @@ def ban_track_dmca(
 
     return {
         "ok": True,
-        "message": f"Трек «{track_title}» успешно удалён и добавлен в чёрный список DMCA",
+        "message": f"Трек «{track_title}» заблокирован администратором и добавлен в чёрный список DMCA",
     }
 
 

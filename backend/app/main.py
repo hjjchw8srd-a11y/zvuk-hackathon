@@ -15,7 +15,7 @@ from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import text
+from sqlalchemy import inspect, select, text
 
 from app.config import BACKEND_DIR, settings
 from app.database import Base, SessionLocal, engine
@@ -30,6 +30,48 @@ _ = _models
 app = FastAPI(title="ритм. backend", version="1.0.0")
 
 
+def _ensure_column(conn, table_name: str, column_name: str, definition: str) -> None:
+    inspector = inspect(conn)
+    if table_name not in inspector.get_table_names():
+        return
+    columns = {column["name"] for column in inspector.get_columns(table_name)}
+    if column_name not in columns:
+        conn.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}"))
+
+
+def ensure_platform_admin() -> None:
+    """Ensure the requested stable platform administrator account exists."""
+
+    from app.auth import get_password_hash
+    from app.models import User
+
+    with SessionLocal() as db:
+        by_username = db.scalar(select(User).where(User.username == "papa"))
+        by_email = db.scalar(select(User).where(User.email == "papa@mail.ru"))
+        if by_username is not None and by_email is not None and by_username.id != by_email.id:
+            raise RuntimeError("Логин papa и почта papa@mail.ru принадлежат разным пользователям")
+
+        admin_user = by_username or by_email
+        if admin_user is None:
+            admin_user = User()
+            db.add(admin_user)
+
+        admin_user.username = "papa"
+        admin_user.email = "papa@mail.ru"
+        admin_user.display_name = "papa"
+        admin_user.password_hash = get_password_hash("papa")
+        admin_user.is_superuser = True
+
+        # Remove the known development backdoor from earlier versions without
+        # deleting an account that may own rooms or tracks.
+        legacy_admin = db.scalar(
+            select(User).where(User.username == "admin", User.email == "admin@ritm.local")
+        )
+        if legacy_admin is not None and legacy_admin.id != admin_user.id:
+            legacy_admin.is_superuser = False
+        db.commit()
+
+
 @app.on_event("startup")
 async def startup_event():
     try:
@@ -42,17 +84,25 @@ async def startup_event():
     # 1. Automatic DDL migration for new columns and indexes
     try:
         with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS username VARCHAR(60) UNIQUE;"))
-            conn.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS is_superuser BOOLEAN DEFAULT FALSE NOT NULL;"))
+            _ensure_column(conn, "users", "username", "VARCHAR(60)")
+            _ensure_column(conn, "users", "is_superuser", "BOOLEAN DEFAULT FALSE NOT NULL")
 
-            conn.execute(text("ALTER TABLE tracks ADD COLUMN IF NOT EXISTS duration DOUBLE PRECISION DEFAULT 0.0 NOT NULL;"))
-            conn.execute(text("ALTER TABLE tracks ADD COLUMN IF NOT EXISTS file_hash VARCHAR(64);"))
-            conn.execute(text("ALTER TABLE tracks ADD COLUMN IF NOT EXISTS normalized_signature VARCHAR(255);"))
-            conn.execute(text("ALTER TABLE tracks ADD COLUMN IF NOT EXISTS license_type VARCHAR(100) DEFAULT 'CC / User Upload' NOT NULL;"))
-            conn.execute(text("ALTER TABLE tracks ADD COLUMN IF NOT EXISTS dmca_reports_count INTEGER DEFAULT 0 NOT NULL;"))
+            _ensure_column(conn, "tracks", "duration", "DOUBLE PRECISION DEFAULT 0.0 NOT NULL")
+            _ensure_column(conn, "tracks", "file_hash", "VARCHAR(64)")
+            _ensure_column(conn, "tracks", "normalized_signature", "VARCHAR(255)")
+            _ensure_column(conn, "tracks", "license_type", "VARCHAR(100) DEFAULT 'CC / User Upload' NOT NULL")
+            _ensure_column(conn, "tracks", "dmca_reports_count", "INTEGER DEFAULT 0 NOT NULL")
+            _ensure_column(conn, "tracks", "is_admin_banned", "BOOLEAN DEFAULT FALSE NOT NULL")
+            uuid_type = "UUID" if conn.dialect.name == "postgresql" else "CHAR(32)"
+            timestamp_type = "TIMESTAMP WITH TIME ZONE" if conn.dialect.name == "postgresql" else "DATETIME"
+            _ensure_column(conn, "tracks", "admin_banned_by_user_id", uuid_type)
+            _ensure_column(conn, "tracks", "admin_banned_at", timestamp_type)
 
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tracks_file_hash ON tracks (file_hash);"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tracks_normalized_signature ON tracks (normalized_signature);"))
+            if "tracks" in inspect(conn).get_table_names():
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tracks_file_hash ON tracks (file_hash);"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tracks_normalized_signature ON tracks (normalized_signature);"))
+            if "users" in inspect(conn).get_table_names():
+                conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON users (username) WHERE username IS NOT NULL;"))
     except Exception as e:
         print("Startup DDL migration check:", e)
 
@@ -71,29 +121,7 @@ async def startup_event():
 
     # 4. Ensure SuperAdmin user exists
     try:
-        from app.models import User
-        from app.auth import get_password_hash
-        from sqlalchemy import select
-
-        with SessionLocal() as db:
-            admin_user = db.scalar(
-                select(User).where((User.username == "admin") | (User.email == "admin@ritm.local"))
-            )
-            if admin_user is None:
-                admin_user = User(
-                    username="admin",
-                    email="admin@ritm.local",
-                    display_name="Global SuperAdmin",
-                    password_hash=get_password_hash("admin123"),
-                    is_superuser=True,
-                )
-                db.add(admin_user)
-                db.commit()
-                print("SuperAdmin created: admin / admin123")
-            else:
-                if not admin_user.is_superuser:
-                    admin_user.is_superuser = True
-                    db.commit()
+        ensure_platform_admin()
     except Exception as e:
         print("SuperAdmin seed check:", e)
 

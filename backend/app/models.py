@@ -240,6 +240,13 @@ class Track(Base):
     dmca_reports_count: Mapped[int] = mapped_column(
         Integer, server_default=text("0"), default=0, nullable=False
     )
+    is_admin_banned: Mapped[bool] = mapped_column(
+        Boolean, server_default=text("false"), default=False, nullable=False
+    )
+    admin_banned_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    admin_banned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     moderation_status: Mapped[ModerationStatus] = mapped_column(
         enum_type(ModerationStatus, "moderation_status"),
         server_default=ModerationStatus.PENDING.value,
@@ -254,6 +261,7 @@ class Track(Base):
 
     room: Mapped[Room] = relationship(back_populates="tracks")
     created_by_user: Mapped[User | None] = relationship(foreign_keys=[created_by_user_id])
+    admin_banned_by_user: Mapped[User | None] = relationship(foreign_keys=[admin_banned_by_user_id])
     queue_items: Mapped[list[QueueItem]] = relationship(
         back_populates="track",
         cascade="all, delete-orphan",

@@ -262,6 +262,52 @@ class CommunityApiTests(unittest.TestCase):
         self.assertEqual(len(history.json()["votes"]), 1)
         self.assertEqual(len(history.json()["plays"]), 1)
 
+    def test_pause_keeps_current_track_and_resume_keeps_position(self) -> None:
+        room_id = self._create_room()
+        added = self.client.post(
+            f"/api/communities/{room_id}/tracks/library", json={"key": "dawn"}
+        )
+        track_id = added.json()["id"]
+
+        played = self.client.post(f"/api/communities/{room_id}/tracks/{track_id}/play")
+        self.assertEqual(played.status_code, 200, played.text)
+        paused = self.client.post(f"/api/communities/{room_id}/tracks/{track_id}/pause")
+        self.assertEqual(paused.status_code, 200, paused.text)
+
+        state = self.client.get(f"/api/communities/{room_id}")
+        self.assertEqual(state.status_code, 200, state.text)
+        self.assertEqual(state.json()["playback"]["current_track_id"], track_id)
+        self.assertEqual(state.json()["playback"]["state"], "paused")
+
+        resumed = self.client.post(f"/api/communities/{room_id}/tracks/{track_id}/play")
+        self.assertEqual(resumed.status_code, 200, resumed.text)
+        self.assertEqual(resumed.json()["state"], "playing")
+        self.assertGreaterEqual(resumed.json()["elapsed_seconds"], paused.json()["elapsed_seconds"])
+
+    def test_platform_admin_ban_cannot_be_reverted_by_room_moderator(self) -> None:
+        room_id = self._create_room()
+        added = self.client.post(
+            f"/api/communities/{room_id}/tracks/library", json={"key": "dawn"}
+        )
+        track_id = added.json()["id"]
+
+        banned = self.client.delete(f"/api/superadmin/tracks/{track_id}/dmca-ban")
+        self.assertEqual(banned.status_code, 200, banned.text)
+
+        app.dependency_overrides[get_current_user] = lambda: User(
+            id=self.test_user_id,
+            email="tester@test.com",
+            display_name="Tester",
+            username="tester",
+            is_superuser=False,
+        )
+        restored = self.client.post(
+            f"/api/communities/{room_id}/tracks/{track_id}/moderate",
+            json={"action": "restore"},
+        )
+        self.assertEqual(restored.status_code, 403, restored.text)
+        self.assertIn("модератор не может", restored.json()["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

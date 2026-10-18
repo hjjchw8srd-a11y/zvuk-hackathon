@@ -60,10 +60,10 @@ class StreamerBotCommandTests(unittest.TestCase):
     def test_track_command_creates_pending_proposal_and_viewer(self) -> None:
         result = self.command("!track dawn")
 
-        self.assertEqual(result.action, "track_proposed")
+        self.assertEqual(result.action, "track_added")
         track = self.db.get(Track, result.track_id)
         self.assertEqual(track.library_key, "dawn")
-        self.assertEqual(track.moderation_status, ModerationStatus.PENDING)
+        self.assertEqual(track.moderation_status, ModerationStatus.APPROVED)
         viewer = self.db.scalar(select(User).where(User.username == "twitch_viewer42"))
         self.assertIsNotNone(viewer)
         self.assertIsNotNone(self.db.get(RoomMember, (self.room.id, viewer.id)))
@@ -72,7 +72,7 @@ class StreamerBotCommandTests(unittest.TestCase):
         self.command("!track dawn")
         duplicate = self.command("!track dawn")
 
-        self.assertEqual(duplicate.action, "duplicate")
+        self.assertEqual(duplicate.action, "duplicate_suggest_vote")
         self.assertEqual(
             self.db.scalar(select(func.count()).select_from(Track)),
             1,

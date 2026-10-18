@@ -779,15 +779,15 @@ export function PartyPage() {
 
           {/* КАРТОЧКА ВХОДА ПО КОДУ */}
           <div className="rounded-3xl bg-[#171717] border border-[#262626] p-8 shadow-2xl relative overflow-hidden flex flex-col justify-between">
-            <div className="absolute top-0 right-0 w-48 h-48 bg-[#a3e635]/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute top-0 right-0 w-48 h-48 bg-[#FDE047]/10 rounded-full blur-3xl pointer-events-none" />
 
             <div>
-              <div className="w-14 h-14 rounded-2xl bg-[#1f261f] border border-[#324530] flex items-center justify-center text-[#a3e635] mb-6 shadow-xl shadow-[#a3e635]/10">
+              <div className="w-14 h-14 rounded-2xl bg-[#242016] border border-[#4a3f24] flex items-center justify-center text-[#FDE047] mb-6 shadow-xl shadow-[#FDE047]/10">
                 <Users size={28} />
               </div>
               <h2 className="text-2xl font-black text-white mb-2">Присоединиться</h2>
               <p className="text-xs text-neutral-400 mb-6 leading-relaxed">
-                Введите инвайт-код, который вам отправил хост вечеринки (например, <span className="text-[#a3e635] font-mono">P8X9K2</span>).
+                Введите инвайт-код, который вам отправил хост вечеринки (например, <span className="text-[#FDE047] font-mono">P8X9K2</span>).
               </p>
 
               <div>
@@ -800,7 +800,7 @@ export function PartyPage() {
                   onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
                   placeholder="PXXXXX"
                   maxLength={12}
-                  className="w-full bg-[#121212] border border-[#2e2e2e] rounded-2xl px-4 py-3.5 text-lg font-mono tracking-widest text-[#a3e635] placeholder-neutral-700 outline-none focus:border-[#a3e635] transition-colors uppercase text-center"
+                  className="w-full bg-[#121212] border border-[#2e2e2e] rounded-2xl px-4 py-3.5 text-lg font-mono tracking-widest text-[#FDE047] placeholder-neutral-700 outline-none focus:border-[#FDE047] transition-colors uppercase text-center"
                 />
               </div>
 
@@ -812,7 +812,7 @@ export function PartyPage() {
             <button
               onClick={handleJoinParty}
               disabled={isSubmitting}
-              className="mt-8 w-full py-4 px-6 rounded-2xl bg-[#1c231d] border border-[#2e402d] hover:bg-[#243025] text-[#a3e635] font-bold text-sm tracking-wide shadow-xl flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98 disabled:opacity-50"
+              className="mt-8 w-full py-4 px-6 rounded-2xl bg-[#242016] border border-[#4a3f24] hover:bg-[#2d281c] text-[#FDE047] font-bold text-sm tracking-wide shadow-xl flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-98 disabled:opacity-50"
             >
               <Share2 size={18} />
               <span>{isSubmitting ? "Подключение..." : "Войти на вечеринку"}</span>
@@ -866,7 +866,7 @@ export function PartyPage() {
                 </span>
 
                 <span className="inline-flex items-center gap-1.5 text-xs text-neutral-300 bg-neutral-900/90 px-3 py-1 rounded-full border border-neutral-800">
-                  <Users size={12} className="text-[#a3e635]" />
+                  <Users size={12} className="text-[#FDE047]" />
                   {participants.length} тусеров
                 </span>
 
@@ -903,7 +903,7 @@ export function PartyPage() {
               className={cn(
                 "h-12 px-5 rounded-2xl font-bold text-xs tracking-wide transition-all shadow-lg flex items-center gap-2 cursor-pointer active:scale-95",
                 isLinkCopied
-                  ? "bg-[#1c231d] border border-[#2e402d] text-[#a3e635]"
+                  ? "bg-[#242016] border border-[#4a3f24] text-[#FDE047]"
                   : "bg-[#221c17] hover:bg-[#2d241d] border border-[#402d1d] text-amber-400 hover:text-amber-300"
               )}
             >
@@ -999,7 +999,7 @@ export function PartyPage() {
                   className={cn(
                     "text-xs font-black",
                     (banger?.score ?? 0) > 0
-                      ? "text-[#a3e635]"
+                      ? "text-[#FDE047]"
                       : (banger?.score ?? 0) < 0
                       ? "text-red-400"
                       : "text-neutral-400"
@@ -1041,7 +1041,7 @@ export function PartyPage() {
                   className={cn(
                     "text-xs font-black",
                     (hitmaker?.total_score ?? 0) > 0
-                      ? "text-[#a3e635]"
+                      ? "text-[#FDE047]"
                       : (hitmaker?.total_score ?? 0) < 0
                       ? "text-red-400"
                       : "text-neutral-400"
@@ -1073,7 +1073,7 @@ export function PartyPage() {
           <div className="rounded-3xl bg-[#171717] border border-[#262626] p-6 shadow-xl relative overflow-hidden">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-bold uppercase tracking-widest text-neutral-400 flex items-center gap-2">
-                <Users size={14} className="text-[#a3e635]" /> Гости тусовки
+                <Users size={14} className="text-[#FDE047]" /> Гости тусовки
               </h3>
               <span className="text-xs text-neutral-500">{participants.length} человек</span>
             </div>
@@ -1150,7 +1150,7 @@ export function PartyPage() {
                     className={cn(
                       "flex items-center gap-3 px-3.5 py-3 rounded-2xl border transition-all group",
                       isCurrent
-                        ? "bg-[#1c231d] border-[#2e402d]"
+                        ? "bg-[#242016] border-[#4a3f24]"
                         : "bg-[#141414] border-[#242424] hover:bg-[#1a1a1a] hover:border-[#2e2e2e]"
                     )}
                   >
@@ -1171,9 +1171,9 @@ export function PartyPage() {
                     >
                       <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                         {isPlaying ? (
-                          <Pause size={16} className="text-[#a3e635] fill-[#a3e635]" />
+                          <Pause size={16} className="text-[#FDE047] fill-[#FDE047]" />
                         ) : (
-                          <Play size={16} className={cn("fill-current ml-0.5", isCurrent ? "text-[#a3e635]" : "text-white")} />
+                          <Play size={16} className={cn("fill-current ml-0.5", isCurrent ? "text-[#FDE047]" : "text-white")} />
                         )}
                       </div>
                     </div>
@@ -1184,13 +1184,13 @@ export function PartyPage() {
                         <p
                           className={cn(
                             "text-sm font-semibold truncate",
-                            isCurrent ? "text-[#a3e635]" : "text-white"
+                            isCurrent ? "text-[#FDE047]" : "text-white"
                           )}
                         >
                           {track.title}
                         </p>
                         {isCurrent && !isPlaying && (
-                          <span className="text-[10px] uppercase font-bold text-neutral-400 bg-neutral-800 px-1.5 py-0.5 rounded shrink-0">Пауза</span>
+                          <span className="text-[10px] uppercase font-bold text-[#FDE047] bg-[#242016] border border-[#4a3f24] px-1.5 py-0.5 rounded shrink-0">Пауза</span>
                         )}
                       </div>
                       <p className="text-xs text-neutral-400 truncate">
@@ -1206,7 +1206,7 @@ export function PartyPage() {
                       className={cn(
                         "text-sm font-extrabold px-2 py-0.5 rounded-lg border tabular-nums shrink-0",
                         (track.score || 0) > 0
-                          ? "text-[#a3e635] bg-[#1a231b] border-[#2c3d2b]"
+                          ? "text-[#FDE047] bg-[#242016] border-[#4a3f24]"
                           : (track.score || 0) < 0
                           ? "text-red-400 bg-red-950/40 border-red-800/40"
                           : "text-neutral-400 bg-[#1c1c1c] border-[#2c2c2c]"
@@ -1222,7 +1222,7 @@ export function PartyPage() {
                         className={cn(
                           "w-6 h-5 rounded flex items-center justify-center transition-colors cursor-pointer",
                           track.my_vote === 1
-                            ? "bg-[#243025] text-[#a3e635]"
+                            ? "bg-[#2d281c] text-[#FDE047]"
                             : "text-neutral-500 hover:text-neutral-200"
                         )}
                         title="Голосовать «За»"
@@ -1268,13 +1268,13 @@ export function PartyPage() {
       {/* ═══ МИНИ-ПЛЕЕР ВНИЗУ ═════════════════════════════════════════════════ */}
       <div
         className={cn(
-          "fixed bottom-[56px] md:bottom-0 right-0 z-40 bg-[#0e0e0e]/95 backdrop-blur-xl border-t border-[#262626] transition-all duration-300",
+          "fixed bottom-[58px] md:bottom-0 right-0 z-40 bg-[#0e0e0e]/95 backdrop-blur-xl border-t border-[#262626] transition-all duration-300",
           sidebarOpen ? "left-0 md:left-64" : "left-0 md:left-[68px]"
         )}
       >
         <div className="h-0.5 w-full bg-neutral-800">
           <div
-            className="h-full bg-[#a3e635] transition-[width] duration-500"
+            className="h-full bg-[#FDE047] transition-[width] duration-500"
             style={{ width: `${player.progress}%` }}
           />
         </div>
@@ -1289,7 +1289,7 @@ export function PartyPage() {
                   {currentPlayingTrack?.title ?? "Общий эфир"}
                 </p>
                 {player.playing && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#a3e635] bg-[#1c231d] border border-[#2e402d] px-1.5 py-0.2 rounded-md">
+                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#FDE047] bg-[#242016] border border-[#4a3f24] px-1.5 py-0.2 rounded-md">
                     <Radio size={10} className="animate-pulse" /> LIVE
                   </span>
                 )}
@@ -1305,7 +1305,7 @@ export function PartyPage() {
               onClick={() => {
                 if (currentPlayingTrack) handlePlayTrack(currentPlayingTrack);
               }}
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-[#1c231d] border border-[#2e402d] text-white hover:bg-[#243025] transition-colors cursor-pointer"
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-[#242016] border border-[#4a3f24] text-white hover:bg-[#2d281c] transition-colors cursor-pointer"
               title={
                 player.isBlockedByAutoplay
                   ? "Нажмите, чтобы включить звук тусовки 🔊"
@@ -1313,16 +1313,16 @@ export function PartyPage() {
               }
             >
               {player.playing && !player.isBlockedByAutoplay ? (
-                <Pause size={17} className="fill-[#a3e635] text-[#a3e635]" />
+                <Pause size={17} className="fill-[#FDE047] text-[#FDE047]" />
               ) : (
-                <Play size={17} className="fill-[#a3e635] text-[#a3e635] ml-0.5" />
+                <Play size={17} className="fill-[#FDE047] text-[#FDE047] ml-0.5" />
               )}
             </button>
             <button
               type="button"
               onClick={() => setIsEqualizerOpen(true)}
               title="Эквалайзер (Web Audio API)"
-              className="w-10 h-10 flex items-center justify-center rounded-full bg-[#1c231d] border border-[#2e402d] text-neutral-400 hover:text-[#a3e635] hover:bg-[#243025] transition-colors cursor-pointer"
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-[#242016] border border-[#4a3f24] text-neutral-400 hover:text-[#FDE047] hover:bg-[#2d281c] transition-colors cursor-pointer"
             >
               <SlidersHorizontal size={17} />
             </button>
@@ -1427,7 +1427,7 @@ export function PartyPage() {
 
                     <button
                       onClick={() => handleAddTrack(tr)}
-                      className="px-3 py-1.5 rounded-xl bg-[#1c231d] border border-[#2e402d] text-[#a3e635] text-xs font-bold hover:bg-[#243025] transition-colors cursor-pointer shrink-0"
+                      className="px-3 py-1.5 rounded-xl bg-[#242016] border border-[#4a3f24] text-[#FDE047] text-xs font-bold hover:bg-[#2d281c] transition-colors cursor-pointer shrink-0"
                     >
                       + В очередь
                     </button>
@@ -1546,7 +1546,7 @@ export function PartyPage() {
                   }}
                   className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-amber-950/40 border border-amber-800/40 text-amber-300 text-xs font-semibold hover:bg-amber-900/40 transition-colors shrink-0 cursor-pointer"
                 >
-                  {isLinkCopied ? <Check size={14} className="text-[#a3e635]" /> : <Copy size={14} />}
+                  {isLinkCopied ? <Check size={14} className="text-[#FDE047]" /> : <Copy size={14} />}
                   {isLinkCopied ? "Скопировано" : "Копировать"}
                 </button>
               </div>
@@ -1598,7 +1598,7 @@ export function PartyPage() {
             audioService.unlock();
             showToast("🔊 Звук тусовки включен!");
           }}
-          className="fixed bottom-24 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md z-50 bg-[#a3e635] text-black font-bold p-3.5 rounded-2xl shadow-2xl flex items-center justify-between gap-3 cursor-pointer border border-[#84cc16] animate-bounce"
+          className="fixed bottom-24 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md z-50 bg-[#FDE047] text-black font-bold p-3.5 rounded-2xl shadow-2xl flex items-center justify-between gap-3 cursor-pointer border border-[#eab308] animate-bounce"
         >
           <div className="flex items-center gap-2.5 min-w-0">
             <Volume2 size={20} className="shrink-0 animate-pulse text-black" />
@@ -1607,7 +1607,7 @@ export function PartyPage() {
               <p className="text-[11px] font-semibold opacity-90 truncate">Нажмите здесь, чтобы включить звук 🔊</p>
             </div>
           </div>
-          <span className="text-[11px] uppercase bg-black text-white px-2.5 py-1 rounded-xl shrink-0">
+          <span className="text-[11px] uppercase bg-black text-[#FDE047] px-2.5 py-1 rounded-xl shrink-0 font-bold">
             Включить
           </span>
         </div>
