@@ -128,7 +128,7 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[580px] bg-[#121215] border-[#262630] text-white p-6 rounded-3xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-start justify-between gap-4 border-b border-[#262630]/70 pb-4">
+        <div className="flex items-start justify-between gap-4 border-b border-[#262630]/70 pb-4 pr-10">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl bg-purple-500/15 border border-purple-500/30 text-purple-400 flex items-center justify-center shrink-0">
               <Bot size={24} />
@@ -145,15 +145,6 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
               </DialogDescription>
             </div>
           </div>
-
-          <button
-            onClick={fetchStatus}
-            disabled={loading}
-            className="p-2 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white transition-colors cursor-pointer"
-            title="Обновить статус"
-          >
-            <RefreshCw size={14} className={cn(loading && "animate-spin")} />
-          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto space-y-4 py-3 pr-1 text-xs">
@@ -188,29 +179,43 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
               </div>
             </div>
 
-            {currentRoomCode && (
+            <div className="flex items-center gap-2 shrink-0">
+              {currentRoomCode && (
+                <button
+                  type="button"
+                  onClick={handleSyncRoom}
+                  disabled={syncing}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl font-bold text-[11px] transition-all cursor-pointer shrink-0 flex items-center gap-1.5",
+                    isBoundToCurrent
+                      ? "bg-emerald-600/20 border border-emerald-500/40 text-emerald-300"
+                      : "bg-purple-600/30 border border-purple-500/50 text-purple-200 hover:bg-purple-600/50"
+                  )}
+                  title="Привязать бота к текущей вечеринке"
+                >
+                  {syncing ? (
+                    "Привязка..."
+                  ) : isBoundToCurrent ? (
+                    <>
+                      <CheckCircle2 size={13} className="text-emerald-400" />
+                      <span>Привязано к {currentRoomCode}</span>
+                    </>
+                  ) : (
+                    <span>Привязать {currentRoomCode}</span>
+                  )}
+                </button>
+              )}
+
               <button
-                onClick={handleSyncRoom}
-                disabled={syncing}
-                className={cn(
-                  "px-3 py-1.5 rounded-xl font-bold text-[11px] transition-all cursor-pointer shrink-0 flex items-center gap-1.5",
-                  isBoundToCurrent
-                    ? "bg-emerald-600/20 border border-emerald-500/40 text-emerald-300"
-                    : "bg-purple-600/30 border border-purple-500/50 text-purple-200 hover:bg-purple-600/50"
-                )}
+                type="button"
+                onClick={fetchStatus}
+                disabled={loading}
+                className="p-1.5 rounded-xl bg-neutral-900 border border-neutral-800 text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors cursor-pointer shrink-0 flex items-center justify-center"
+                title="Обновить статус соединения"
               >
-                {syncing ? (
-                  "Привязка..."
-                ) : isBoundToCurrent ? (
-                  <>
-                    <CheckCircle2 size={13} className="text-emerald-400" />
-                    <span>Привязано к {currentRoomCode}</span>
-                  </>
-                ) : (
-                  <span>Привязать {currentRoomCode}</span>
-                )}
+                <RefreshCw size={13} className={cn(loading && "animate-spin")} />
               </button>
-            )}
+            </div>
           </div>
 
           {/* SSH Tunnel Hint for remote connection if not yet connected */}
