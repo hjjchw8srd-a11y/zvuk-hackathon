@@ -347,10 +347,10 @@ class StreamerBotBridge:
         import websockets
 
         async with websockets.connect(
-            settings.streamerbot_ws_url, open_timeout=5, ping_interval=20, ping_timeout=20
+            settings.streamerbot_ws_url, open_timeout=30, ping_interval=30, ping_timeout=30
         ) as websocket:
             self._socket = websocket
-            hello = json.loads(await asyncio.wait_for(websocket.recv(), timeout=5))
+            hello = json.loads(await asyncio.wait_for(websocket.recv(), timeout=15))
             if hello.get("request") != "Hello":
                 raise RuntimeError("Streamer.bot не прислал Hello")
             self.connected = True
