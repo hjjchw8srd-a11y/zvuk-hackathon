@@ -686,16 +686,6 @@ export function PartyPage() {
               Отдельное независимое пространство: своя очередь треков, инвайт-код для друзей, живое голосование и синхронный звук.
             </p>
           </div>
-
-          <button
-            type="button"
-            onClick={() => setIsStreamerBotOpen(true)}
-            className="px-5 py-3 rounded-2xl bg-purple-950/40 hover:bg-purple-900/60 border border-purple-700/50 text-purple-300 hover:text-white font-bold text-xs transition-all flex items-center gap-2.5 cursor-pointer shadow-xl shadow-purple-950/20 shrink-0 active:scale-95"
-            title="Настройка Twitch чата и Streamer.bot"
-          >
-            <Bot size={18} />
-            <span>Twitch Чат / Бот</span>
-          </button>
         </div>
 
         {/* Две карточки: Создать или Войти */}
@@ -801,13 +791,6 @@ export function PartyPage() {
             {toast}
           </div>
         )}
-
-        {/* Модальное окно Twitch чата */}
-        <StreamerBotModal
-          open={isStreamerBotOpen}
-          onOpenChange={setIsStreamerBotOpen}
-          currentRoomCode="ZVUK26"
-        />
       </div>
     );
   }
