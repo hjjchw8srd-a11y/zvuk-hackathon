@@ -26,6 +26,7 @@ class Settings(BaseSettings):
     streamerbot_room_id: str = ""
     streamerbot_room_code: str = ""
     streamerbot_command_prefix: str = "!"
+    twitch_channel: str = "scruffy892"
 
 
 settings = Settings()

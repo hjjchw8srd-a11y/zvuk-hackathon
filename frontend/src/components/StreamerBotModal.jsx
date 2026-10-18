@@ -174,13 +174,15 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
                 <p className="font-bold text-white text-xs truncate">
                   {isConnected
                     ? "Подключено к Streamer.bot (Twitch активен)"
+                    : status?.twitch_irc_connected
+                    ? `Twitch IRC подключен (${status?.twitch_channel ? `#${status.twitch_channel}` : "чат активен"})`
                     : isEnabled
                     ? "Мост включен, ожидает Streamer.bot"
                     : "Интеграция выключена"}
                 </p>
                 <p className="text-[11px] text-neutral-400 mt-0.5 truncate">
-                  {status?.url || "ws://127.0.0.1:8080/"}
-                  {status?.room_code ? ` · Комната: ${status.room_code}` : ""}
+                  {status?.twitch_irc_connected ? `Чат: #${status?.twitch_channel || "scruffy892"} · ` : ""}
+                  {status?.room_code ? `Комната: ${status.room_code}` : ""}
                   {status?.commands_processed ? ` · Обработано: ${status.commands_processed}` : ""}
                 </p>
               </div>
@@ -257,7 +259,7 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
             </p>
             <div className="rounded-2xl bg-[#16161d] border border-[#262630] divide-y divide-[#262630] overflow-hidden font-mono text-[11px]">
               {[
-                { cmd: "!sr dawn", desc: "Предложить трек в очередь (алиас: !track, !трек)" },
+                { cmd: "!sr funk90", desc: "Добавить трек в очередь (алиас: !track, !трек)" },
                 { cmd: "!tracks", desc: "Показать список треков медиатеки" },
                 { cmd: "!queue", desc: "Показать топ очереди воспроизведения" },
                 { cmd: "!now", desc: "Показать играющий сейчас трек" },
@@ -287,7 +289,7 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
 
             {/* Quick Chips */}
             <div className="flex flex-wrap gap-1.5 mb-2.5">
-              {["!tracks", "!sr dawn", "!queue", "!now", "!help"].map((chip) => (
+              {["!sr funk90", "!tracks", "!sr dawn", "!queue", "!now", "!help"].map((chip) => (
                 <button
                   key={chip}
                   type="button"

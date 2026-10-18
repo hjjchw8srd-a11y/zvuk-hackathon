@@ -267,14 +267,59 @@ def handle_chat_command(
         duration=float(item["duration_seconds"]),
         source_type=TrackSource.LIBRARY,
         library_key=item["key"],
-        moderation_status=ModerationStatus.PENDING,
+        moderation_status=ModerationStatus.APPROVED,
         created_by_user_id=viewer.id,
     )
     db.add(track)
-    db.commit()
-    db.refresh(track)
+    db.flush()
 
-    from app.routers.communities import manager
+    from app.routers.communities import _add_to_active_queue, manager
+    _add_to_active_queue(db, room, track, viewer.id)
+
+    from app.models import PartySession, PartyQueueItem
+    from app.routers.parties import party_manager
+
+    party = db.scalar(
+        select(PartySession)
+        .where(PartySession.is_active.is_(True))
+        .order_by(PartySession.started_at.desc())
+    )
+    if party is not None:
+        party_dup = db.scalar(
+            select(PartyQueueItem).where(
+                PartyQueueItem.party_id == party.id,
+                PartyQueueItem.library_key == item["key"],
+            )
+        )
+        if party_dup is None:
+            party_item = PartyQueueItem(
+                party_id=party.id,
+                title=item["title"],
+                artist=item["artist"],
+                genre=item.get("genre", "Вечеринка"),
+                duration_seconds=item["duration_seconds"],
+                source_type="library",
+                library_key=item["key"],
+                added_by_user_id=viewer.id,
+                score=1,
+            )
+            db.add(party_item)
+            db.commit()
+            party_manager.notify_party(
+                party.id,
+                action="track_added",
+                extra={
+                    "track_id": str(party_item.id),
+                    "title": party_item.title,
+                    "contributor": viewer.display_name or user_login,
+                },
+            )
+        else:
+            db.commit()
+    else:
+        db.commit()
+
+    db.refresh(track)
 
     manager.notify_room(
         room.id,
@@ -286,10 +331,10 @@ def handle_chat_command(
         },
     )
     return CommandResult(
-        reply=f"{mention}, «{track.title}» отправлен модератору на рассмотрение 🎵",
+        reply=f"{mention}, «{track.title}» добавлен в очередь воспроизведения 🎵",
         room_id=room.id,
         track_id=track.id,
-        action="track_proposed",
+        action="track_added",
     )
 
 
@@ -298,6 +343,7 @@ class StreamerBotBridge:
         self.task: asyncio.Task | None = None
         self.connected = False
         self.authenticated = False
+        self.twitch_irc_connected = False
         self.last_error: str | None = None
         self.last_event_at: datetime | None = None
         self.commands_processed = 0
@@ -310,13 +356,15 @@ class StreamerBotBridge:
             "enabled": settings.streamerbot_enabled,
             "connected": self.connected,
             "authenticated": self.authenticated,
+            "twitch_irc_connected": self.twitch_irc_connected,
+            "twitch_channel": settings.twitch_channel,
             "url": settings.streamerbot_ws_url,
             "room_id": settings.streamerbot_room_id or None,
             "room_code": settings.streamerbot_room_code or None,
             "last_error": self.last_error,
             "last_event_at": self.last_event_at.isoformat() if self.last_event_at else None,
             "commands_processed": self.commands_processed,
-            "commands": ["!track", "!tracks", "!queue", "!now", "!help"],
+            "commands": ["!sr <трек>", "!tracks", "!queue", "!now", "!help"],
         }
 
     def start(self) -> None:
@@ -333,6 +381,7 @@ class StreamerBotBridge:
         self.task = None
         self.connected = False
         self.authenticated = False
+        self.twitch_irc_connected = False
 
     @staticmethod
     def _authentication(password: str, salt: str, challenge: str) -> str:
@@ -388,7 +437,70 @@ class StreamerBotBridge:
                 if event.get("source") == "Twitch" and event.get("type") == "ChatMessage":
                     await self._on_chat_message(payload.get("data") or {})
 
+    async def _connect_twitch_irc(self) -> None:
+        import random
+        import websockets
+
+        channel = (settings.twitch_channel or "scruffy892").strip().lstrip("#").lower()
+        if not channel:
+            return
+
+        async with websockets.connect(
+            "wss://irc-ws.chat.twitch.tv:443", open_timeout=20, ping_interval=30, ping_timeout=30
+        ) as ws:
+            await ws.send("CAP REQ :twitch.tv/tags twitch.tv/commands")
+            await ws.send("PASS SCHMOOPIE")
+            await ws.send(f"NICK justinfan{random.randint(10000, 99999)}")
+            await ws.send(f"JOIN #{channel}")
+            self.twitch_irc_connected = True
+            logger.info("Direct Twitch IRC connected and joined #%s", channel)
+
+            try:
+                async for raw in ws:
+                    for line in raw.split("\r\n"):
+                        if not line:
+                            continue
+                        if line.startswith("PING"):
+                            await ws.send("PONG :tmi.twitch.tv")
+                            continue
+                        if "PRIVMSG" in line:
+                            match = re.search(
+                                r"display-name=([^;]*).*?user-id=([^;]*).*?:(\w+)!.*?PRIVMSG #\w+ :(.*)$",
+                                line,
+                            )
+                            if match:
+                                disp, uid, login, text = match.groups()
+                            else:
+                                sm = re.search(r":(\w+)!.*?PRIVMSG #\w+ :(.*)$", line)
+                                if sm:
+                                    login, text = sm.groups()
+                                    disp, uid = login, ""
+                                else:
+                                    continue
+
+                            text = text.strip()
+                            if text.startswith(settings.streamerbot_command_prefix or "!"):
+                                await self._on_chat_message(
+                                    {
+                                        "text": text,
+                                        "user": {
+                                            "id": uid,
+                                            "login": login,
+                                            "name": disp or login,
+                                        },
+                                    }
+                                )
+            finally:
+                self.twitch_irc_connected = False
+
     async def _run(self) -> None:
+        await asyncio.gather(
+            self._run_streamerbot_loop(),
+            self._run_twitch_irc_loop(),
+            return_exceptions=True,
+        )
+
+    async def _run_streamerbot_loop(self) -> None:
         delay = 1
         while True:
             try:
@@ -406,8 +518,26 @@ class StreamerBotBridge:
             await asyncio.sleep(delay)
             delay = min(delay * 2, 15)
 
+    async def _run_twitch_irc_loop(self) -> None:
+        delay = 2
+        while True:
+            try:
+                await self._connect_twitch_irc()
+                delay = 2
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                logger.warning("Twitch IRC listener: %s", error)
+            finally:
+                self.twitch_irc_connected = False
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 20)
+
     async def _on_chat_message(self, data: dict) -> None:
-        message_id = str(data.get("messageId") or "")
+        user = data.get("user") or {}
+        text = str(data.get("text") or "").strip()
+        login = str(user.get("login") or "viewer")
+        message_id = str(data.get("messageId") or f"{login}:{text}:{int(datetime.now(timezone.utc).timestamp())}")
         if message_id and message_id in self._recent_id_set:
             return
         if message_id:
@@ -416,15 +546,14 @@ class StreamerBotBridge:
             self._recent_ids.append(message_id)
             self._recent_id_set.add(message_id)
 
-        text = str(data.get("text") or "")
         if not text.startswith(settings.streamerbot_command_prefix or "!"):
             return
-        user = data.get("user") or {}
+
         result = await asyncio.to_thread(
             self._handle_in_database,
             text,
             str(user.get("id") or ""),
-            str(user.get("login") or "viewer"),
+            login,
             str(user.get("name") or user.get("login") or "Viewer"),
         )
         self.last_event_at = datetime.now(timezone.utc)
@@ -452,19 +581,22 @@ class StreamerBotBridge:
     async def send_chat_message(self, message: str) -> None:
         if self._socket is None:
             return
-        await self._socket.send(
-            json.dumps(
-                {
-                    "request": "SendMessage",
-                    "id": f"reply-{uuid.uuid4()}",
-                    "platform": "twitch",
-                    "bot": False,
-                    "internal": False,
-                    "message": message[:450],
-                },
-                ensure_ascii=False,
+        try:
+            await self._socket.send(
+                json.dumps(
+                    {
+                        "request": "SendMessage",
+                        "id": f"reply-{uuid.uuid4()}",
+                        "platform": "Twitch",
+                        "bot": False,
+                        "internal": False,
+                        "message": message[:450],
+                    },
+                    ensure_ascii=False,
+                )
             )
-        )
+        except Exception as e:
+            logger.warning("Streamer.bot send_chat_message failed: %s", e)
 
 
 streamerbot_bridge = StreamerBotBridge()
