@@ -2,6 +2,25 @@ import { createContext, useContext, useEffect, useState } from "react";
 
 const AuthContext = createContext(null);
 
+function formatApiError(detail, fallback) {
+  if (!detail) return fallback;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((d) => {
+        if (d?.msg?.includes("at least")) {
+          return "Пароль должен содержать минимум 4 символа";
+        }
+        return d.msg || d.detail || JSON.stringify(d);
+      })
+      .join(", ");
+  }
+  if (typeof detail === "object") {
+    return detail.msg || detail.detail || JSON.stringify(detail);
+  }
+  return String(detail);
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -43,9 +62,9 @@ export function AuthProvider({ children }) {
       body: JSON.stringify({ login: loginOrEmail, password }),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => null);
     if (!res.ok) {
-      throw new Error(data.detail || "Ошибка при входе в аккаунт");
+      throw new Error(formatApiError(data?.detail, "Ошибка при входе в аккаунт"));
     }
 
     localStorage.setItem("token", data.access_token);
@@ -71,9 +90,9 @@ export function AuthProvider({ children }) {
       body: JSON.stringify(payload),
     });
 
-    const data = await res.json();
+    const data = await res.json().catch(() => null);
     if (!res.ok) {
-      throw new Error(data.detail || "Ошибка при регистрации");
+      throw new Error(formatApiError(data?.detail, "Ошибка при регистрации"));
     }
 
     localStorage.setItem("token", data.access_token);
