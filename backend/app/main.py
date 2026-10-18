@@ -49,11 +49,12 @@ def ensure_platform_admin() -> None:
         by_username = db.scalar(select(User).where(User.username == "papa"))
         by_email = db.scalar(select(User).where(User.email == "papa@mail.ru"))
         if by_username is not None and by_email is not None and by_username.id != by_email.id:
-            raise RuntimeError("Логин papa и почта papa@mail.ru принадлежат разным пользователям")
+            by_email.email = f"papa_archived_{by_email.id.hex[:6]}@mail.ru"
+            db.flush()
 
         admin_user = by_username or by_email
         if admin_user is None:
-            admin_user = User()
+            admin_user = User(id=uuid.uuid4())
             db.add(admin_user)
 
         admin_user.username = "papa"

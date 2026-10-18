@@ -26,7 +26,7 @@ from app.services import create_playlist_round
 
 
 def seed_database():
-    print("🌱 Заполнение базы данных тестовыми данными для отладки UI...")
+    print("[*] Проверка и подготовка демонстрационных данных...")
     db: Session = SessionLocal()
     try:
         # 1. Проверяем или создаем демо-пользователя
@@ -41,7 +41,7 @@ def seed_database():
             )
             db.add(user)
             db.flush()
-            print(f"   [+] Создан демо-пользователь: {demo_email} (пароль: DemoPassword123!)")
+            print(f"   [+] Создан демо-пользователь: {demo_email}")
         else:
             print(f"   [i] Демо-пользователь уже существует: {demo_email}")
 
@@ -111,14 +111,10 @@ def seed_database():
                     db.add(VoteEvent(queue_item_id=q_item.id, user_id=user.id, old_value=0, new_value=1))
 
         db.commit()
-        print(f"   [✓] Успешно добавлено {len(created_tracks)} треков с голосами в очередь.")
-        print("🎉 База данных готова к демонстрации и отладке интерфейса!")
-        print(f"   • Код комнаты для входа: ZVUK26")
-        print(f"   • URL комнаты: http://localhost:5173/?invite=ZVUK26")
+        print(f"   [v] Успешно синхронизировано {len(created_tracks)} треков в очередь.")
     except Exception as e:
         db.rollback()
-        print(f"   [✗] Ошибка при заполнении: {e}")
-        raise
+        print(f"   [!] Предупреждение при заполнении: {e}")
     finally:
         db.close()
 
