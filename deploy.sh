@@ -7,8 +7,8 @@ echo "========================================================"
 echo " [1/4] Обновление исходного кода из Git ($BRANCH)..."
 echo "========================================================"
 cd /var/www/zvuk
-git fetch origin "$BRANCH"
-git reset --hard "origin/$BRANCH"
+git fetch origin "$BRANCH" 2>/dev/null || git fetch upstream "$BRANCH" 2>/dev/null || git fetch --all
+git reset --hard "origin/$BRANCH" 2>/dev/null || git reset --hard "upstream/$BRANCH" 2>/dev/null || git reset --hard "$BRANCH"
 chmod -R 755 /var/www/zvuk
 
 echo "========================================================"
