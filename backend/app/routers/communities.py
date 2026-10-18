@@ -53,10 +53,10 @@ from app.services import (
     ConflictError,
     ForbiddenError,
     NotFoundError,
-    cast_vote,
     complete_current_and_play_next,
     create_playlist_round,
     get_ranked_queue,
+    set_vote,
 )
 router = APIRouter(prefix="/api", tags=["communities"])
 
@@ -217,7 +217,7 @@ class JoinRequest(BaseModel):
 
 
 class VoteRequest(BaseModel):
-    value: int
+    value: int = Field(ge=-1, le=1)
 
 
 class FavoriteRequest(BaseModel):
@@ -1281,11 +1281,7 @@ def vote_track(
     if item is None:
         raise HTTPException(status_code=409, detail="Трек отсутствует в активной очереди")
     try:
-        if payload.value == 0:
-            existing = db.scalar(select(Vote).where(Vote.queue_item_id == item.id, Vote.user_id == user.id))
-            result = cast_vote(db, item.id, user.id, existing.value) if existing else 0
-        else:
-            result = cast_vote(db, item.id, user.id, payload.value)
+        result = set_vote(db, item.id, user.id, payload.value)
         db.commit()
         manager.notify_room(room_id, action="vote", extra={"track_id": str(track_id), "value": result})
         return {"value": result}

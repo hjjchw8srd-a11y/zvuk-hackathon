@@ -198,9 +198,6 @@ export function PartyPage() {
     toastTimer.current = setTimeout(() => setToast(null), 3500);
   }, []);
 
-  // Флаг локальной паузы для тусовки
-  const isLocallyPausedRef = useRef(false);
-
   // Subscribe to audioService
   useEffect(() => {
     const unsub = audioService.subscribe((state) => {
@@ -254,34 +251,24 @@ export function PartyPage() {
               elapsedSec = Math.max(0, (Date.now() - new Date(pb.started_at).getTime()) / 1000);
             }
             const trackDur = tr.duration_seconds || 45;
-            if (isLocallyPausedRef.current) {
-              setPlayer((p) => ({
-                ...p,
-                trackId: tr.id,
-                playing: false,
-                elapsed: elapsedSec,
-                progress: trackDur > 0 ? (elapsedSec / trackDur) * 100 : 0,
-              }));
+            setPlayer((p) => ({
+              ...p,
+              trackId: tr.id,
+              playing: true,
+              elapsed: elapsedSec,
+              progress: trackDur > 0 ? (elapsedSec / trackDur) * 100 : 0,
+            }));
+            if (audioService.currentTrack?.id !== tr.id || !audioService.isPlaying) {
+              audioService.play({
+                ...tr,
+                library_key: tr.source_type === "upload" ? null : (tr.library_key || "bustin"),
+              }, null, elapsedSec).catch(() => {});
             } else {
-              setPlayer((p) => ({
-                ...p,
-                trackId: tr.id,
-                playing: true,
-                elapsed: elapsedSec,
-                progress: trackDur > 0 ? (elapsedSec / trackDur) * 100 : 0,
-              }));
-              if (audioService.currentTrack?.id !== tr.id || !audioService.isPlaying) {
-                audioService.play({
-                  ...tr,
-                  library_key: tr.source_type === "upload" ? null : (tr.library_key || "bustin"),
-                }, null, elapsedSec).catch(() => {});
-              } else {
-                audioService.syncToPosition(elapsedSec);
-              }
+              audioService.syncToPosition(elapsedSec);
             }
           }
         } else if (pb.state === "paused") {
-          if (canModerate || (pb.current_track_id && String(audioService.currentTrack?.id) === String(pb.current_track_id))) {
+          if (pb.current_track_id && String(audioService.currentTrack?.id) === String(pb.current_track_id)) {
             if (audioService.isPlaying) {
               audioService.pause();
             }
@@ -626,21 +613,27 @@ export function PartyPage() {
         "Content-Type": "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       };
-      await fetch(`/api/parties/${activePartyId}/tracks/${trackId}/vote`, {
+      const response = await fetch(`/api/parties/${activePartyId}/tracks/${trackId}/vote`, {
         method: "POST",
         headers,
         body: JSON.stringify({ value: nextVote }),
       });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.detail || "Не удалось сохранить голос");
+      }
       fetchPartyState(activePartyId);
-    } catch {}
+    } catch (error) {
+      fetchPartyState(activePartyId);
+      showToast(`⚠️ ${error.message}`);
+    }
   };
 
-  // Playback control (Host controls room broadcast, guests control local playback)
+  // Playback control: the host owns the shared stream; guests only unlock audio.
   const handlePlayTrack = async (track) => {
     if (!activePartyId) return;
 
     if (audioService.isBlockedByAutoplay) {
-      isLocallyPausedRef.current = false;
       await audioService.unlock();
       showToast("🔊 Звук тусовки включен!");
     }
@@ -648,27 +641,13 @@ export function PartyPage() {
     const isHost = partyState?.is_host;
 
     if (!isHost) {
-      if (player.trackId === track.id && player.playing) {
-        isLocallyPausedRef.current = true;
-        audioService.pause();
-        setPlayer((p) => ({ ...p, playing: false }));
-        showToast("⏸ Воспроизведение на вашем устройстве приостановлено");
-        return;
-      }
-      isLocallyPausedRef.current = false;
-      audioService.unlock().catch(() => {});
-      await audioService.play({
-        ...track,
-        library_key: track.source_type === "upload" ? null : (track.library_key || "bustin"),
-      });
-      setPlayer({ trackId: track.id, playing: true, progress: 0, elapsed: 0 });
-      showToast(`🎧 Локальное воспроизведение: ${track.title}`);
+      await audioService.unlock();
+      showToast("🎙 Воспроизведением управляет ведущий");
       return;
     }
 
     const token = localStorage.getItem("token");
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    isLocallyPausedRef.current = false;
     audioService.unlock().catch(() => {});
 
     if (player.trackId === track.id && player.playing) {
@@ -1171,7 +1150,7 @@ export function PartyPage() {
                     <div
                       className="relative w-11 h-11 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-800 flex items-center justify-center shrink-0 cursor-pointer overflow-hidden shadow-md"
                       onClick={() => handlePlayTrack(track)}
-                      title={isHost ? "Хост: включить у всех" : "Слушать локально"}
+                      title={isHost ? "Хост: включить у всех" : "Воспроизведением управляет ведущий"}
                     >
                       <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
                         {isPlaying ? (
@@ -1313,7 +1292,7 @@ export function PartyPage() {
               title={
                 player.isBlockedByAutoplay
                   ? "Нажмите, чтобы включить звук тусовки 🔊"
-                  : (isHost ? "Хост: Play / Pause для всех" : "Слушать локально")
+                  : (isHost ? "Хост: Play / Pause для всех" : "Воспроизведением управляет ведущий")
               }
             >
               {player.playing && !player.isBlockedByAutoplay ? (

@@ -247,6 +247,74 @@ def cast_vote(
     return new_value
 
 
+def set_vote(
+    session: Session,
+    queue_item_id: uuid.UUID,
+    user_id: uuid.UUID,
+    value: int,
+) -> int:
+    """Idempotently store the vote state requested by the web client.
+
+    Unlike ``cast_vote`` (a button-toggle helper used by chat commands), this
+    operation is safe to retry: sending the same desired value twice cannot
+    accidentally remove a vote.
+    """
+
+    if value not in (-1, 0, 1):
+        raise ValueError("Голос должен быть равен -1, 0 или +1")
+
+    existing_item = session.get(QueueItem, queue_item_id)
+    if existing_item is None:
+        raise NotFoundError("Элемент очереди не найден")
+
+    room = _locked_room(session, existing_item.room_id)
+    queue_item = session.scalar(
+        select(QueueItem)
+        .join(PlaylistRound, PlaylistRound.id == QueueItem.round_id)
+        .where(
+            QueueItem.id == queue_item_id,
+            QueueItem.state.in_((QueueItemState.QUEUED, QueueItemState.PLAYING)),
+            PlaylistRound.status == RoundStatus.ACTIVE,
+        )
+        .with_for_update()
+    )
+    if queue_item is None:
+        raise ConflictError("Голосование доступно только для активной очереди")
+
+    _require_member(session, queue_item.room_id, user_id)
+    if session.get(User, user_id) is None:
+        raise NotFoundError("Пользователь не найден")
+
+    vote = session.scalar(
+        select(Vote)
+        .where(Vote.queue_item_id == queue_item_id, Vote.user_id == user_id)
+        .with_for_update()
+    )
+    old_value = vote.value if vote is not None else 0
+    if old_value == value:
+        return value
+
+    if value == 0:
+        if vote is not None:
+            session.delete(vote)
+    elif vote is None:
+        session.add(Vote(queue_item_id=queue_item_id, user_id=user_id, value=value))
+    else:
+        vote.value = value
+
+    session.add(
+        VoteEvent(
+            queue_item_id=queue_item_id,
+            user_id=user_id,
+            old_value=old_value,
+            new_value=value,
+        )
+    )
+    room.queue_version += 1
+    session.flush()
+    return value
+
+
 def snapshot_round_top(
     session: Session,
     room_id: uuid.UUID,

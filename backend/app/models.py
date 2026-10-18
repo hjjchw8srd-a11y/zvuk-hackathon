@@ -639,6 +639,10 @@ class PartySession(Base):
     invite_code: Mapped[str] = mapped_column(String(10), nullable=False, unique=True)
     playback_track_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
     playback_state: Mapped[str] = mapped_column(String(20), server_default=text("'paused'"), default="paused", nullable=False)
+    playback_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    playback_position_seconds: Mapped[float] = mapped_column(
+        Float, server_default=text("0.0"), default=0.0, nullable=False
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     host: Mapped[User] = relationship(foreign_keys=[host_id])

@@ -32,6 +32,7 @@ from app.services import (
     create_playlist_round,
     fairness_penalty,
     get_ranked_queue,
+    set_vote,
 )
 
 
@@ -162,6 +163,22 @@ class PlaylistServiceTests(unittest.TestCase):
         vote = self.session.scalar(select(Vote))
         self.assertIsNotNone(vote)
         self.assertEqual(vote.value, -1)
+        self.assertEqual(
+            self.session.scalar(select(func.count()).select_from(VoteEvent)), 3
+        )
+
+    def test_web_vote_state_is_idempotent_and_allows_playing_track(self) -> None:
+        self._round()
+        item = self._item_for(self.member_track)
+
+        self.assertEqual(set_vote(self.session, item.id, self.owner.id, 1), 1)
+        self.assertEqual(set_vote(self.session, item.id, self.owner.id, 1), 1)
+        item.state = QueueItemState.PLAYING
+        self.assertEqual(set_vote(self.session, item.id, self.owner.id, -1), -1)
+        self.assertEqual(set_vote(self.session, item.id, self.owner.id, 0), 0)
+        self.session.commit()
+
+        self.assertIsNone(self.session.scalar(select(Vote)))
         self.assertEqual(
             self.session.scalar(select(func.count()).select_from(VoteEvent)), 3
         )

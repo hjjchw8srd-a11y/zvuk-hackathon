@@ -67,10 +67,14 @@ class SoundEngine {
 
     if (typeof window !== "undefined") {
       const handleGesture = () => {
-        this.unlock().catch(() => {});
+        // Do not restart/seek the shared stream on every click. We only need a
+        // gesture while the browser has actually blocked audio or Web Audio is
+        // still suspended (usually the first interaction on mobile Safari).
+        if (this.isBlockedByAutoplay || this.context?.state === "suspended") {
+          this.unlock().catch(() => {});
+        }
       };
       window.addEventListener("pointerdown", handleGesture, { passive: true });
-      window.addEventListener("touchstart", handleGesture, { passive: true });
       window.addEventListener("keydown", handleGesture, { passive: true });
     }
 
@@ -234,11 +238,7 @@ class SoundEngine {
       }
     }
 
-    if (this.context.state === "suspended") {
-      this.context.resume()
-        .then(() => this.attachAudioElementSource())
-        .catch(() => {});
-    } else if (this.context.state === "running") {
+    if (this.context.state === "running") {
       this.attachAudioElementSource();
     }
 
@@ -265,20 +265,14 @@ class SoundEngine {
       }
     });
     audio.addEventListener("error", (e) => {
-      console.warn("Audio playback error:", e);
-      // Fallback: If CORS prevented loading with crossOrigin="anonymous", retry directly without crossOrigin
-      if (audio.crossOrigin) {
-        console.warn("Retrying playback without crossOrigin attribute...");
-        audio.removeAttribute("crossOrigin");
-        audio.load();
-        if (this.isPlaying) {
-          audio.play().catch(() => {
-            if (this.isPlaying) this.startSynth();
-          });
-        }
-        return;
-      }
-      if (this.isPlaying) this.startSynth();
+      // All production media URLs are same-origin. Mutating crossOrigin and
+      // reloading an element already connected to MediaElementSource creates a
+      // second asynchronous playback attempt and intermittently leaves it
+      // silent. Keep one stable source and let the UI remain retryable.
+      console.warn("Audio playback error:", e, audio.error);
+      this.isPlaying = false;
+      this.isBlockedByAutoplay = false;
+      this.notify();
     });
 
     this.audio = audio;
@@ -382,10 +376,13 @@ class SoundEngine {
   async unlock() {
     this.ensureAudioContext();
     if (this.context && this.context.state === "suspended") {
-      this.context.resume().then(() => {
-        this.attachAudioElementSource();
-      }).catch(() => {});
-    } else if (this.context && this.context.state === "running") {
+      try {
+        await this.context.resume();
+      } catch (error) {
+        console.warn("AudioContext unlock failed:", error);
+      }
+    }
+    if (this.context && this.context.state === "running") {
       this.attachAudioElementSource();
     }
 
@@ -508,10 +505,8 @@ class SoundEngine {
 
     if (streamUrl) {
       const audio = this.getAudioElement();
-      if (!audio.crossOrigin) {
-        audio.crossOrigin = "anonymous";
-      }
       audio.src = streamUrl;
+      audio.load();
       if (targetOffset > 0) {
         this.seekAudio(audio, targetOffset);
       }

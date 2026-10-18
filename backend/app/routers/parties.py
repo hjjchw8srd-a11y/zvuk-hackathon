@@ -46,6 +46,20 @@ def _elapsed_seconds(started_at: datetime | None) -> float:
     return max(0.0, (datetime.now(timezone.utc) - started_at).total_seconds())
 
 
+def _playback_elapsed(party: PartySession, now: datetime | None = None) -> float:
+    """Return the durable shared-playback position for a party."""
+
+    elapsed = max(0.0, float(party.playback_position_seconds or 0.0))
+    if party.playback_state == "playing" and party.playback_started_at is not None:
+        started_at = party.playback_started_at
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+        else:
+            started_at = started_at.astimezone(timezone.utc)
+        elapsed += max(0.0, ((now or datetime.now(timezone.utc)) - started_at).total_seconds())
+    return elapsed
+
+
 # ── ConnectionManager для изолированных сокетов вечеринок ────────────────────
 class PartyConnectionManager:
     def __init__(self):
@@ -147,6 +161,10 @@ class PartyTrackAddRequest(BaseModel):
 
 class PartyUpdateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=150)
+
+
+class PartyVoteRequest(BaseModel):
+    value: int = Field(ge=-1, le=1)
 
 
 def _clean_title(title: str | None) -> str:
@@ -480,6 +498,9 @@ def get_party_state(
     if party.is_active and party.started_at:
         duration = int(_elapsed_seconds(party.started_at))
 
+    playback_now = datetime.now(timezone.utc)
+    playback_elapsed = _playback_elapsed(party, playback_now)
+
     return {
         "party": {
             "id": str(party.id),
@@ -500,9 +521,9 @@ def get_party_state(
         "playback": {
             "current_track_id": str(party.playback_track_id) if party.playback_track_id else None,
             "state": party.playback_state,
-            "started_at": party_manager.playback_starts.get(str(party.id)).isoformat() if (party.playback_state == "playing" and party.playback_track_id and party_manager.playback_starts.get(str(party.id))) else None,
-            "server_time": datetime.now(timezone.utc).isoformat(),
-            "elapsed_seconds": round(max(0.0, (datetime.now(timezone.utc) - party_manager.playback_starts[str(party.id)]).total_seconds()), 2) if (party.playback_state == "playing" and party.playback_track_id and party_manager.playback_starts.get(str(party.id))) else 0.0,
+            "started_at": party.playback_started_at.isoformat() if party.playback_started_at else None,
+            "server_time": playback_now.isoformat(),
+            "elapsed_seconds": round(playback_elapsed, 2),
         },
     }
 
@@ -672,19 +693,21 @@ def play_party_track(
     if item is None or item.party_id != party.id:
         raise HTTPException(status_code=404, detail="Трек не найден в очереди вечеринки")
 
+    now_utc = datetime.now(timezone.utc)
+    is_resume = party.playback_track_id == item.id and party.playback_state == "paused"
+    if not is_resume:
+        party.playback_position_seconds = 0.0
     party.playback_track_id = item.id
     party.playback_state = "playing"
+    party.playback_started_at = now_utc
     db.commit()
-
-    now_utc = datetime.now(timezone.utc)
-    party_manager.playback_starts[str(party.id)] = now_utc
 
     playback_extra = {
         "track_id": str(track_id),
         "state": "playing",
         "started_at": now_utc.isoformat(),
         "server_time": now_utc.isoformat(),
-        "elapsed_seconds": 0.0,
+        "elapsed_seconds": round(float(party.playback_position_seconds or 0.0), 2),
     }
     party_manager.notify_party(
         party.id,
@@ -710,17 +733,32 @@ def pause_party_track(
     if party.host_id != user.id:
         raise HTTPException(status_code=403, detail="Управлять музыкой на вечеринке может только хост")
 
+    if party.playback_track_id != track_id:
+        raise HTTPException(status_code=409, detail="Этот трек сейчас не воспроизводится")
+
+    now_utc = datetime.now(timezone.utc)
+    party.playback_position_seconds = _playback_elapsed(party, now_utc)
     party.playback_state = "paused"
+    party.playback_started_at = None
     db.commit()
-    party_manager.playback_starts.pop(str(party.id), None)
 
     party_manager.notify_party(
         party.id,
         action="playback",
-        extra={"track_id": str(track_id), "state": "paused"},
+        extra={
+            "track_id": str(track_id),
+            "state": "paused",
+            "server_time": now_utc.isoformat(),
+            "elapsed_seconds": round(float(party.playback_position_seconds), 2),
+        },
     )
 
-    return {"ok": True, "state": "paused", "track_id": str(track_id)}
+    return {
+        "ok": True,
+        "state": "paused",
+        "track_id": str(track_id),
+        "elapsed_seconds": round(float(party.playback_position_seconds), 2),
+    }
 
 
 @router.post("/{party_id}/stop")
@@ -739,6 +777,8 @@ def stop_party(
 
     party.is_active = False
     party.ended_at = datetime.now(timezone.utc)
+    party.playback_position_seconds = _playback_elapsed(party, party.ended_at)
+    party.playback_started_at = None
     party.playback_state = "paused"
     db.commit()
 

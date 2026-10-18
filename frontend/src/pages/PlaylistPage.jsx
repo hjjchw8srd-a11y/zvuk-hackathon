@@ -356,9 +356,6 @@ export function PlaylistPage() {
     tracksRef.current = tracks;
   }, [tracks]);
 
-  // Флаг локальной паузы: если пользователь сам нажал паузу, опрос не возобновляет звук
-  const isLocallyPausedRef = useRef(false);
-
   // Реф для смены обложки
   const avatarInputRef = useRef(null);
 
@@ -497,16 +494,7 @@ export function PlaylistPage() {
                   elapsedSec = Math.max(0, (Date.now() - new Date(pb.started_at).getTime()) / 1000);
                 }
                 const trackDur = trackToPlay.duration_seconds || 45;
-                if (isLocallyPausedRef.current) {
-                  // Пользователь сам нажал паузу на устройстве: обновляем инфо о треке, но не запускаем звук
-                  setPlayer((p) => ({
-                    ...p,
-                    trackId: trackToPlay.id,
-                    playing: false,
-                    elapsed: elapsedSec,
-                    progress: trackDur > 0 ? (elapsedSec / trackDur) * 100 : 0,
-                  }));
-                } else if (audioService.currentTrack?.id !== trackToPlay.id || !audioService.isPlaying) {
+                if (audioService.currentTrack?.id !== trackToPlay.id || !audioService.isPlaying) {
                   audioService.play({
                     ...trackToPlay,
                     room_id: roomId,
@@ -560,7 +548,7 @@ export function PlaylistPage() {
         }
       })
       .catch(() => {});
-  }, [user?.id]);
+  }, [user?.id, canModerate]);
 
   const fetchTopHistory = useCallback((roomId) => {
     if (!roomId) return;
@@ -625,15 +613,7 @@ export function PlaylistPage() {
                   const targetTrack = tracksRef.current.find((t) => String(t.id) === String(data.track_id));
                   if (targetTrack) {
                     const trackDur = targetTrack.duration_seconds || 45;
-                    if (isLocallyPausedRef.current) {
-                      setPlayer((p) => ({
-                        ...p,
-                        trackId: targetTrack.id,
-                        playing: false,
-                        elapsed: elapsedSec,
-                        progress: trackDur > 0 ? (elapsedSec / trackDur) * 100 : 0,
-                      }));
-                    } else if (audioService.currentTrack?.id !== targetTrack.id || !audioService.isPlaying) {
+                    if (audioService.currentTrack?.id !== targetTrack.id || !audioService.isPlaying) {
                       audioService.play({
                         ...targetTrack,
                         room_id: currentRoomId,
@@ -691,7 +671,7 @@ export function PlaylistPage() {
         ws.close();
       }
     };
-  }, [currentRoomId, fetchCommunityData, fetchTopHistory]);
+  }, [currentRoomId, fetchCommunityData, fetchTopHistory, canModerate]);
 
   useEffect(() => {
     document.title = "Плейлист · ритм.";
@@ -726,25 +706,8 @@ export function PlaylistPage() {
     }
 
     if (!canModerate) {
-      // Если трек уже играет -> пауза на этом устройстве
-      if (String(player.trackId) === String(trackId) && player.playing) {
-        isLocallyPausedRef.current = true;
-        audioService.pause();
-        setPlayer((p) => ({ ...p, playing: false }));
-        showToast("⏸ Воспроизведение на вашем устройстве приостановлено");
-        return;
-      }
-      // Иначе запускаем локально
-      const track = tracks.find((t) => String(t.id) === String(trackId));
-      if (!track) return;
-      isLocallyPausedRef.current = false;
-      await audioService.play({
-        ...track,
-        room_id: currentRoomId,
-        library_key: track.source_type === "upload" ? null : (track.library_key || "dawn"),
-      });
-      setPlayer({ trackId, playing: true, progress: 0, elapsed: 0 });
-      showToast(`🎧 Локальное воспроизведение: ${track.title}`);
+      await audioService.unlock();
+      showToast("🎙 Воспроизведением управляет модератор");
       return;
     }
 
@@ -753,7 +716,6 @@ export function PlaylistPage() {
 
     const token = localStorage.getItem("token");
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    isLocallyPausedRef.current = false;
 
     if (String(player.trackId) === String(trackId) && player.playing) {
       try {
@@ -805,16 +767,9 @@ export function PlaylistPage() {
     const next = s[(idx + 1) % s.length];
 
     audioService.unlock().catch(() => {});
-    isLocallyPausedRef.current = false;
-
     if (!canModerate) {
-      await audioService.play({
-        ...next,
-        room_id: currentRoomId,
-        library_key: next.source_type === "upload" ? null : (next.library_key || "dawn"),
-      });
-      setPlayer({ trackId: next.id, playing: true, progress: 0, elapsed: 0 });
-      showToast(`🎧 Локальное воспроизведение: ${next.title}`);
+      await audioService.unlock();
+      showToast("🎙 Следующий трек выбирает модератор");
       return;
     }
 
@@ -849,16 +804,9 @@ export function PlaylistPage() {
     const prev = s[(idx - 1 + s.length) % s.length];
 
     audioService.unlock().catch(() => {});
-    isLocallyPausedRef.current = false;
-
     if (!canModerate) {
-      await audioService.play({
-        ...prev,
-        room_id: currentRoomId,
-        library_key: prev.source_type === "upload" ? null : (prev.library_key || "dawn"),
-      });
-      setPlayer({ trackId: prev.id, playing: true, progress: 0, elapsed: 0 });
-      showToast(`🎧 Локальное воспроизведение: ${prev.title}`);
+      await audioService.unlock();
+      showToast("🎙 Предыдущий трек выбирает модератор");
       return;
     }
 
@@ -893,31 +841,13 @@ export function PlaylistPage() {
     }
 
     if (!canModerate) {
-      if (player.playing) {
-        isLocallyPausedRef.current = true;
-        audioService.pause();
-        setPlayer((p) => ({ ...p, playing: false }));
-        showToast("⏸ Воспроизведение на вашем устройстве приостановлено");
-        return;
-      } else {
-        isLocallyPausedRef.current = false;
-        const currentT = tracks.find((t) => String(t.id) === String(player.trackId)) || sortedTracks(tracks)[0];
-        if (currentT) {
-          await audioService.play({
-            ...currentT,
-            room_id: currentRoomId,
-            library_key: currentT.source_type === "upload" ? null : (currentT.library_key || "dawn"),
-          }, null, player.elapsed || 0);
-          setPlayer((p) => ({ ...p, playing: true, trackId: currentT.id }));
-          showToast("▶️ Воспроизведение включено");
-        }
-        return;
-      }
+      await audioService.unlock();
+      showToast("🎙 Воспроизведением управляет модератор");
+      return;
     }
 
     const token = localStorage.getItem("token");
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
-    isLocallyPausedRef.current = false;
 
     if (!player.trackId && tracks.length > 0) {
       const first = sortedTracks(tracks)[0];
@@ -1101,7 +1031,7 @@ export function PlaylistPage() {
       if (currentRoomId) {
         try {
           const token = localStorage.getItem("token");
-          await fetch(`/api/communities/${currentRoomId}/tracks/${trackId}/vote`, {
+          const response = await fetch(`/api/communities/${currentRoomId}/tracks/${trackId}/vote`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -1109,11 +1039,18 @@ export function PlaylistPage() {
             },
             body: JSON.stringify({ value: nextVote }),
           });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) {
+            throw new Error(payload.detail || "Не удалось сохранить голос");
+          }
           fetchCommunityData(currentRoomId);
-        } catch {}
+        } catch (error) {
+          fetchCommunityData(currentRoomId);
+          showToast(`⚠️ ${error.message}`);
+        }
       }
     },
-    [addHistory, tracks, currentRoomId, fetchCommunityData]
+    [addHistory, tracks, currentRoomId, fetchCommunityData, showToast]
   );
 
   // Модерация
@@ -1668,7 +1605,7 @@ export function PlaylistPage() {
           <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             <button
               onClick={playerPrev}
-              title={canModerate ? "Предыдущий трек" : "Предыдущий трек (локально)"}
+              title={canModerate ? "Предыдущий трек" : "Управляет модератор"}
               className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center text-neutral-400 hover:text-white transition-colors rounded-lg hover:bg-neutral-800 cursor-pointer"
             >
               <SkipBack size={16} />
@@ -1692,7 +1629,7 @@ export function PlaylistPage() {
             </button>
             <button
               onClick={playerNext}
-              title={canModerate ? "Следующий трек" : "Следующий трек (локально)"}
+              title={canModerate ? "Следующий трек" : "Управляет модератор"}
               className="w-7 h-7 sm:w-8 sm:h-8 flex items-center justify-center text-neutral-400 hover:text-white transition-colors rounded-lg hover:bg-neutral-800 cursor-pointer"
             >
               <SkipForward size={16} />

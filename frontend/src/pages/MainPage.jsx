@@ -169,7 +169,7 @@ export function MainPage() {
 
     try {
       const token = localStorage.getItem("token");
-      await fetch(`/api/communities/${activeCommunity.id}/tracks/${currentTrack.id}/vote`, {
+      const response = await fetch(`/api/communities/${activeCommunity.id}/tracks/${currentTrack.id}/vote`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -177,8 +177,15 @@ export function MainPage() {
         },
         body: JSON.stringify({ value: nextVote }),
       });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.detail || "Не удалось сохранить голос");
+      }
       fetchActiveCommunityTracks(activeCommunity.id);
-    } catch {}
+    } catch (error) {
+      console.warn("Vote failed:", error);
+      fetchActiveCommunityTracks(activeCommunity.id);
+    }
   };
 
   const handleTogglePreviewPlay = () => {

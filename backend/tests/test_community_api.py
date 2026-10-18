@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import tempfile
 import unittest
@@ -16,7 +17,7 @@ from app.database import Base, get_db
 from app.main import app
 from app.config import settings
 from app.auth import get_current_user
-from app.models import User
+from app.models import PartySession, User
 import uuid
 
 
@@ -283,6 +284,42 @@ class CommunityApiTests(unittest.TestCase):
         self.assertEqual(resumed.status_code, 200, resumed.text)
         self.assertEqual(resumed.json()["state"], "playing")
         self.assertGreaterEqual(resumed.json()["elapsed_seconds"], paused.json()["elapsed_seconds"])
+
+    def test_party_playback_timeline_survives_process_memory_loss(self) -> None:
+        created = self.client.post("/api/parties/create", json={"title": "Тестовый эфир"})
+        self.assertEqual(created.status_code, 200, created.text)
+        party_id = created.json()["party_id"]
+
+        initial_state = self.client.get(f"/api/parties/{party_id}/state")
+        self.assertEqual(initial_state.status_code, 200, initial_state.text)
+        track_id = initial_state.json()["tracks"][0]["id"]
+
+        played = self.client.post(f"/api/parties/{party_id}/tracks/{track_id}/play")
+        self.assertEqual(played.status_code, 200, played.text)
+
+        # Simulate time passing and a backend restart: the durable database
+        # fields must be sufficient even when the old process dictionary is empty.
+        with Session(self.engine) as session:
+            party = session.get(PartySession, uuid.UUID(party_id))
+            party.playback_started_at = datetime.now(timezone.utc) - timedelta(seconds=3)
+            session.commit()
+
+        from app.routers.parties import party_manager
+
+        party_manager.playback_starts.clear()
+        running_state = self.client.get(f"/api/parties/{party_id}/state")
+        self.assertGreaterEqual(running_state.json()["playback"]["elapsed_seconds"], 2.5)
+
+        paused = self.client.post(f"/api/parties/{party_id}/tracks/{track_id}/pause")
+        self.assertEqual(paused.status_code, 200, paused.text)
+        paused_at = paused.json().get("elapsed_seconds")
+        state_after_pause = self.client.get(f"/api/parties/{party_id}/state").json()
+        self.assertEqual(state_after_pause["playback"]["state"], "paused")
+        self.assertAlmostEqual(state_after_pause["playback"]["elapsed_seconds"], paused_at, delta=0.1)
+
+        resumed = self.client.post(f"/api/parties/{party_id}/tracks/{track_id}/play")
+        self.assertEqual(resumed.status_code, 200, resumed.text)
+        self.assertGreaterEqual(resumed.json()["elapsed_seconds"], paused_at)
 
     def test_platform_admin_ban_cannot_be_reverted_by_room_moderator(self) -> None:
         room_id = self._create_room()

@@ -104,6 +104,13 @@ async def startup_event():
             timestamp_type = "TIMESTAMP WITH TIME ZONE" if conn.dialect.name == "postgresql" else "DATETIME"
             _ensure_column(conn, "tracks", "admin_banned_by_user_id", uuid_type)
             _ensure_column(conn, "tracks", "admin_banned_at", timestamp_type)
+            _ensure_column(conn, "party_sessions", "playback_started_at", timestamp_type)
+            _ensure_column(
+                conn,
+                "party_sessions",
+                "playback_position_seconds",
+                "DOUBLE PRECISION DEFAULT 0.0 NOT NULL",
+            )
 
             if "tracks" in inspect(conn).get_table_names():
                 conn.execute(text("CREATE INDEX IF NOT EXISTS ix_tracks_file_hash ON tracks (file_hash);"))
