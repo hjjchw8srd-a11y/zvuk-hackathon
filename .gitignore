@@ -1,6 +1,7 @@
 node_modules/
 backend/node_modules/
-dist/
+/dist/
+!frontend/dist/**
 *.log
 *.tmp
 .cache/
