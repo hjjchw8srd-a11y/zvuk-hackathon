@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 set -e
 
+BRANCH="${1:-final}"
+
 echo "========================================================"
-echo " [1/4] Обновление исходного кода из Git (project-db)..."
+echo " [1/4] Обновление исходного кода из Git ($BRANCH)..."
 echo "========================================================"
 cd /var/www/zvuk
-git fetch origin project-db
-git reset --hard origin/project-db
+git fetch origin "$BRANCH"
+git reset --hard "origin/$BRANCH"
 chmod -R 755 /var/www/zvuk
 
 echo "========================================================"
