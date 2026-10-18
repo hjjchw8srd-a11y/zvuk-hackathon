@@ -858,7 +858,9 @@ export function PartyPage() {
               </div>
 
               <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight flex items-center gap-2">
-                {party.title || "Вечеринка"}
+                {(!party.title || party.title.replace(/\s+/g, "").split("").every((c) => c === "?"))
+                  ? "Главная вечеринка"
+                  : party.title}
                 <span className="text-base font-normal text-amber-400">⚡</span>
               </h1>
             </div>

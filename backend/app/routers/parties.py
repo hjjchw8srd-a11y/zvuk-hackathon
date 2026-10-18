@@ -134,8 +134,17 @@ class PartyTrackAddRequest(BaseModel):
     duration_seconds: int = 45
 
 
-class PartyVoteRequest(BaseModel):
-    value: int = Field(ge=-1, le=1)
+class PartyUpdateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=150)
+
+
+def _clean_title(title: str | None) -> str:
+    if not title:
+        return "Главная вечеринка 🔥"
+    stripped = title.strip().replace(" ", "")
+    if not stripped or set(stripped) == {"?"}:
+        return "Главная вечеринка 🔥"
+    return title.strip()
 
 
 def _gen_party_code(db: Session) -> str:
@@ -322,7 +331,7 @@ def get_user_active_party(
             return {
                 "has_active": True,
                 "party_id": str(party.id),
-                "title": party.title,
+                "title": _clean_title(party.title),
                 "invite_code": party.invite_code,
                 "is_host": party.host_id == user.id,
             }
@@ -337,7 +346,7 @@ def get_user_active_party(
         return {
             "has_active": True,
             "party_id": str(recent_active.id),
-            "title": recent_active.title,
+            "title": _clean_title(recent_active.title),
             "invite_code": recent_active.invite_code,
             "is_host": recent_active.host_id == user.id,
         }
@@ -463,7 +472,7 @@ def get_party_state(
     return {
         "party": {
             "id": str(party.id),
-            "title": party.title,
+            "title": _clean_title(party.title),
             "invite_code": party.invite_code,
             "is_active": party.is_active,
             "started_at": party.started_at.isoformat() if party.started_at else None,
@@ -482,6 +491,22 @@ def get_party_state(
             "state": party.playback_state,
         },
     }
+
+
+@router.patch("/{party_id}")
+def update_party(
+    party_id: uuid.UUID,
+    payload: PartyUpdateRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    party = db.get(PartySession, party_id)
+    if party is None or not party.is_active:
+        raise HTTPException(status_code=404, detail="Вечеринка не найдена")
+    party.title = payload.title.strip()
+    db.commit()
+    party_manager.notify_party(party.id, action="party_updated", extra={"title": party.title})
+    return {"ok": True, "title": party.title}
 
 
 @router.post("/{party_id}/tracks")
