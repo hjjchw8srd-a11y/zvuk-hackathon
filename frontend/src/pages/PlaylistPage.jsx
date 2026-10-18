@@ -126,12 +126,12 @@ function VoteBlock({ track, onVote }) {
   );
 }
 
-function TrackRow({ track, rank, isPlaying, canModerate, onPlay, onVote, onFavorite, onDelete, onReport }) {
+function TrackRow({ track, rank, isPlaying, isCurrent, canModerate, onPlay, onVote, onFavorite, onDelete, onReport }) {
   const delta = (track.prevRank || rank) - rank;
   return (
     <div className={cn(
       "flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all group",
-      isPlaying
+      isCurrent
         ? "bg-[#1c231d]/90 border-[#2e402d]"
         : "bg-transparent border-transparent hover:bg-[#171717] hover:border-[#262626]"
     )}>
@@ -150,14 +150,23 @@ function TrackRow({ track, rank, isPlaying, canModerate, onPlay, onVote, onFavor
         <TrackThumb gradient={track.gradient} size={44} />
         <div className={cn(
           "absolute inset-0 rounded-xl bg-black/60 flex items-center justify-center transition-opacity",
-          isPlaying ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+          isPlaying ? "opacity-100" : (isCurrent ? "opacity-90" : "opacity-0 group-hover:opacity-100")
         )}>
-          {isPlaying ? <Pause size={16} className="text-[#a3e635] fill-[#a3e635]" /> : <Play size={16} className="text-white fill-white" />}
+          {isPlaying ? (
+            <Pause size={16} className="text-[#a3e635] fill-[#a3e635]" />
+          ) : (
+            <Play size={16} className={cn("fill-current", isCurrent ? "text-[#a3e635]" : "text-white")} />
+          )}
         </div>
       </div>
 
       <div className="flex-1 min-w-0">
-        <p className={cn("text-sm font-semibold truncate", isPlaying ? "text-[#a3e635]" : "text-white")}>{track.title}</p>
+        <div className="flex items-center gap-2">
+          <p className={cn("text-sm font-semibold truncate", isCurrent ? "text-[#a3e635]" : "text-white")}>{track.title}</p>
+          {isCurrent && !isPlaying && (
+            <span className="text-[10px] uppercase font-bold text-neutral-400 bg-neutral-800 px-1.5 py-0.5 rounded shrink-0">Пауза</span>
+          )}
+        </div>
         <p className="text-xs text-neutral-400 truncate">{track.artist}</p>
         <p className="text-[11px] text-neutral-500 mt-0.5">
           Предложил: <span className="text-neutral-400">{track.proposer}</span> · {track.duration}
@@ -491,20 +500,38 @@ export function PlaylistPage() {
             if (pb.state === "playing" && pb.current_track_id) {
               const trackToPlay = active.find((t) => String(t.id) === String(pb.current_track_id));
               if (trackToPlay) {
+                let elapsedSec = 0;
+                if (typeof pb.elapsed_seconds === "number") {
+                  elapsedSec = pb.elapsed_seconds;
+                } else if (pb.started_at) {
+                  elapsedSec = Math.max(0, (Date.now() - new Date(pb.started_at).getTime()) / 1000);
+                }
+                const trackDur = trackToPlay.duration_seconds || 45;
                 if (audioService.currentTrack?.id !== trackToPlay.id || !audioService.isPlaying) {
                   audioService.play({
                     ...trackToPlay,
                     room_id: roomId,
                     library_key: trackToPlay.library_key || "dawn",
-                  }).catch(() => {});
-                  setPlayer({ trackId: trackToPlay.id, playing: true, progress: 0, elapsed: 0 });
+                  }, null, elapsedSec).catch(() => {});
+                  setPlayer({
+                    trackId: trackToPlay.id,
+                    playing: true,
+                    progress: trackDur > 0 ? (elapsedSec / trackDur) * 100 : 0,
+                    elapsed: elapsedSec,
+                  });
+                } else {
+                  audioService.syncToPosition(elapsedSec);
                 }
               }
             } else if (pb.state === "paused") {
               if (audioService.isPlaying) {
                 audioService.pause();
               }
-              setPlayer((p) => ({ ...p, playing: false }));
+              setPlayer((p) => ({
+                ...p,
+                trackId: pb.current_track_id || p.trackId,
+                playing: false,
+              }));
             }
           }
 
@@ -575,17 +602,35 @@ export function PlaylistPage() {
               if (data.action === "playback") {
                 if (data.state === "paused") {
                   audioService.pause();
-                  setPlayer((p) => ({ ...p, playing: false }));
+                  setPlayer((p) => ({
+                    ...p,
+                    trackId: data.track_id || p.trackId,
+                    playing: false,
+                  }));
                 } else if (data.state === "playing" && data.track_id) {
+                  let elapsedSec = 0;
+                  if (typeof data.elapsed_seconds === "number") {
+                    elapsedSec = data.elapsed_seconds;
+                  } else if (data.started_at) {
+                    elapsedSec = Math.max(0, (Date.now() - new Date(data.started_at).getTime()) / 1000);
+                  }
                   const targetTrack = tracksRef.current.find((t) => String(t.id) === String(data.track_id));
                   if (targetTrack) {
+                    const trackDur = targetTrack.duration_seconds || 45;
                     if (audioService.currentTrack?.id !== targetTrack.id || !audioService.isPlaying) {
                       audioService.play({
                         ...targetTrack,
                         room_id: currentRoomId,
                         library_key: targetTrack.library_key || "dawn",
-                      }).catch(() => {});
-                      setPlayer({ trackId: targetTrack.id, playing: true, progress: 0, elapsed: 0 });
+                      }, null, elapsedSec).catch(() => {});
+                      setPlayer({
+                        trackId: targetTrack.id,
+                        playing: true,
+                        progress: trackDur > 0 ? (elapsedSec / trackDur) * 100 : 0,
+                        elapsed: elapsedSec,
+                      });
+                    } else {
+                      audioService.syncToPosition(elapsedSec);
                     }
                   }
                 }
@@ -1422,7 +1467,8 @@ export function PlaylistPage() {
               key={track.id}
               track={track}
               rank={idx + 1}
-              isPlaying={player.trackId === track.id}
+              isPlaying={player.trackId === track.id && player.playing}
+              isCurrent={player.trackId === track.id}
               canModerate={canModerate}
               onPlay={playTrack}
               onVote={handleVote}

@@ -599,6 +599,21 @@ def _community_state(db: Session, room: Room, membership: RoomMember, user: User
             }
         )
     playing_track = next((t for t in tracks_payload if t["queue_state"] == "playing"), None)
+    now_utc = datetime.now(timezone.utc)
+    playing_started_at = None
+    elapsed_seconds = 0.0
+    if playing_track:
+        playing_queue_item = db.scalar(
+            select(QueueItem).where(
+                QueueItem.round_id == playlist_round.id,
+                QueueItem.track_id == playing_track["id"],
+                QueueItem.state == QueueItemState.PLAYING,
+            )
+        )
+        if playing_queue_item and playing_queue_item.started_at:
+            playing_started_at = playing_queue_item.started_at.isoformat()
+            elapsed_seconds = max(0.0, (now_utc - playing_queue_item.started_at).total_seconds())
+
     return {
         "community": {
             "id": room.id,
@@ -621,6 +636,9 @@ def _community_state(db: Session, room: Room, membership: RoomMember, user: User
         "playback": {
             "current_track_id": playing_track["id"] if playing_track else None,
             "state": "playing" if playing_track else "paused",
+            "started_at": playing_started_at,
+            "server_time": now_utc.isoformat(),
+            "elapsed_seconds": round(elapsed_seconds, 2),
         },
         "week_key": playlist_round.starts_at.date().isoformat(),
         "vote_round": playlist_round.key,
@@ -1171,16 +1189,26 @@ def play_track(
         current.state = QueueItemState.PLAYED
         current.completed_at = datetime.now(timezone.utc)
         db.flush()
+    now_utc = datetime.now(timezone.utc)
     if item.state != QueueItemState.PLAYING:
         item.version += 1
         item.state = QueueItemState.PLAYING
-        item.started_at = datetime.now(timezone.utc)
+        item.started_at = now_utc
         item.completed_at = None
         db.add(PlaybackHistory(queue_item_id=item.id, played_by_user_id=user.id, queue_version=item.version, started_at=item.started_at))
         room.queue_version += 1
     db.commit()
-    manager.notify_room(room_id, action="playback", extra={"track_id": str(track_id), "state": "playing"})
-    return {"ok": True, "queue_version": item.version, "track_id": str(track_id), "state": "playing"}
+    started_at_str = item.started_at.isoformat() if item.started_at else now_utc.isoformat()
+    elapsed = max(0.0, (now_utc - item.started_at).total_seconds()) if item.started_at else 0.0
+    playback_extra = {
+        "track_id": str(track_id),
+        "state": "playing",
+        "started_at": started_at_str,
+        "server_time": now_utc.isoformat(),
+        "elapsed_seconds": round(elapsed, 2),
+    }
+    manager.notify_room(room_id, action="playback", extra=playback_extra)
+    return {"ok": True, "queue_version": item.version, **playback_extra}
 
 
 @router.post("/communities/{room_id}/tracks/{track_id}/pause")
@@ -1205,7 +1233,7 @@ def pause_track(
         room.queue_version += 1
     db.commit()
     manager.notify_room(room_id, action="playback", extra={"track_id": str(track_id), "state": "paused"})
-    return {"ok": True, "state": "paused"}
+    return {"ok": True, "state": "paused", "track_id": str(track_id)}
 
 
 @router.post("/communities/{room_id}/tracks/{track_id}/complete")
@@ -1224,7 +1252,19 @@ def complete_track(
         previous, next_item = complete_current_and_play_next(db, room_id, user.id, expected_queue_item_id=item.id, expected_version=payload.queue_version)
         db.commit()
         next_track_id = str(next_item.track_id) if next_item else None
-        manager.notify_room(room_id, action="playback", extra={"track_id": next_track_id, "state": "playing" if next_item else "paused"})
+        now_utc = datetime.now(timezone.utc)
+        started_at_str = next_item.started_at.isoformat() if (next_item and next_item.started_at) else None
+        manager.notify_room(
+            room_id,
+            action="playback",
+            extra={
+                "track_id": next_track_id,
+                "state": "playing" if next_item else "paused",
+                "started_at": started_at_str,
+                "server_time": now_utc.isoformat(),
+                "elapsed_seconds": 0.0,
+            },
+        )
         return {"completed": previous is not None, "next_track": {"id": next_item.track_id} if next_item else None}
     except (ConflictError, ForbiddenError, NotFoundError) as error:
         db.rollback()

@@ -252,16 +252,33 @@ export function PartyPage() {
         if (pb.state === "playing" && pb.current_track_id) {
           const tr = data.tracks?.find((t) => String(t.id) === String(pb.current_track_id));
           if (tr) {
-            setPlayer((p) => ({ ...p, trackId: tr.id, playing: true }));
+            let elapsedSec = 0;
+            if (typeof pb.elapsed_seconds === "number") {
+              elapsedSec = pb.elapsed_seconds;
+            } else if (pb.started_at) {
+              elapsedSec = Math.max(0, (Date.now() - new Date(pb.started_at).getTime()) / 1000);
+            }
+            const trackDur = tr.duration_seconds || 45;
+            setPlayer((p) => ({
+              ...p,
+              trackId: tr.id,
+              playing: true,
+              elapsed: elapsedSec,
+              progress: trackDur > 0 ? (elapsedSec / trackDur) * 100 : 0,
+            }));
             if (audioService.currentTrack?.id !== tr.id || !audioService.isPlaying) {
               audioService.play({
                 ...tr,
                 library_key: tr.library_key || "bustin",
-              }).catch(() => {});
+              }, null, elapsedSec).catch(() => {});
+            } else {
+              audioService.syncToPosition(elapsedSec);
             }
           }
-        } else if (pb.state === "paused" && audioService.isPlaying) {
-          audioService.pause();
+        } else if (pb.state === "paused") {
+          if (audioService.isPlaying) {
+            audioService.pause();
+          }
           setPlayer((p) => ({ ...p, playing: false }));
         }
       }
@@ -1101,9 +1118,13 @@ export function PartyPage() {
             {/* Список треков */}
             <div className="flex flex-col gap-2">
               {tracksList.map((track, idx) => {
+                const isCurrent =
+                  player.trackId === track.id ||
+                  partyState?.playback?.current_track_id === track.id;
                 const isPlaying =
-                  (player.trackId === track.id && player.playing) ||
-                  (partyState?.playback?.current_track_id === track.id && partyState?.playback?.state === "playing");
+                  isCurrent &&
+                  ((player.trackId === track.id && player.playing) ||
+                   (partyState?.playback?.current_track_id === track.id && partyState?.playback?.state === "playing"));
                 const medals = ["🥇", "🥈", "🥉"];
 
                 return (
@@ -1111,7 +1132,7 @@ export function PartyPage() {
                     key={track.id}
                     className={cn(
                       "flex items-center gap-3 px-3.5 py-3 rounded-2xl border transition-all group",
-                      isPlaying
+                      isCurrent
                         ? "bg-[#1c231d] border-[#2e402d]"
                         : "bg-[#141414] border-[#242424] hover:bg-[#1a1a1a] hover:border-[#2e2e2e]"
                     )}
@@ -1135,21 +1156,26 @@ export function PartyPage() {
                         {isPlaying ? (
                           <Pause size={16} className="text-[#a3e635] fill-[#a3e635]" />
                         ) : (
-                          <Play size={16} className="text-white fill-white ml-0.5" />
+                          <Play size={16} className={cn("fill-current ml-0.5", isCurrent ? "text-[#a3e635]" : "text-white")} />
                         )}
                       </div>
                     </div>
 
                     {/* Название и исполнитель */}
                     <div className="flex-1 min-w-0">
-                      <p
-                        className={cn(
-                          "text-sm font-semibold truncate",
-                          isPlaying ? "text-[#a3e635]" : "text-white"
+                      <div className="flex items-center gap-2">
+                        <p
+                          className={cn(
+                            "text-sm font-semibold truncate",
+                            isCurrent ? "text-[#a3e635]" : "text-white"
+                          )}
+                        >
+                          {track.title}
+                        </p>
+                        {isCurrent && !isPlaying && (
+                          <span className="text-[10px] uppercase font-bold text-neutral-400 bg-neutral-800 px-1.5 py-0.5 rounded shrink-0">Пауза</span>
                         )}
-                      >
-                        {track.title}
-                      </p>
+                      </div>
                       <p className="text-xs text-neutral-400 truncate">
                         {track.artist} · <span className="text-neutral-500">{track.genre}</span>
                       </p>

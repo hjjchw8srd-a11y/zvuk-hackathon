@@ -313,28 +313,45 @@ class SoundEngine {
     }
   }
 
-  async play(track, audioUrl = null) {
+  async play(track, audioUrl = null, startOffsetSeconds = 0) {
     if (!track) return;
 
     this.ensureAudioContext();
 
-    // If same track and paused, resume
-    if (this.currentTrack?.id === track.id && !this.isPlaying) {
-      this.isPlaying = true;
-      this.started = performance.now();
-      if (this.audio) {
-        await this.audio.play();
-      } else {
-        this.startSynth();
+    const targetOffset = (typeof startOffsetSeconds === "number" && startOffsetSeconds > 0) ? startOffsetSeconds : 0;
+
+    // If same track
+    if (this.currentTrack?.id === track.id) {
+      if (targetOffset > 0) {
+        if (this.audio) {
+          if (Math.abs(this.audio.currentTime - targetOffset) > 0.75) {
+            try { this.audio.currentTime = targetOffset; } catch {}
+          }
+        } else {
+          if (Math.abs(this.seconds - targetOffset) > 0.75) {
+            this.offset = targetOffset;
+            this.started = performance.now();
+          }
+        }
       }
-      this.notify();
+
+      if (!this.isPlaying) {
+        this.isPlaying = true;
+        this.started = performance.now();
+        if (this.audio) {
+          await this.audio.play();
+        } else {
+          this.startSynth();
+        }
+        this.notify();
+      }
       return;
     }
 
     // New track
     this.stop();
     this.currentTrack = track;
-    this.offset = 0;
+    this.offset = targetOffset;
     this.isPlaying = true;
     this.started = performance.now();
 
@@ -354,8 +371,22 @@ class SoundEngine {
     if (streamUrl) {
       const audio = this.getAudioElement();
       audio.src = streamUrl;
+      if (targetOffset > 0) {
+        const onLoaded = () => {
+          try {
+            audio.currentTime = targetOffset;
+          } catch {}
+          audio.removeEventListener("loadedmetadata", onLoaded);
+          audio.removeEventListener("canplay", onLoaded);
+        };
+        audio.addEventListener("loadedmetadata", onLoaded);
+        audio.addEventListener("canplay", onLoaded);
+      }
       try {
         await audio.play();
+        if (targetOffset > 0 && Math.abs(audio.currentTime - targetOffset) > 0.75) {
+          try { audio.currentTime = targetOffset; } catch {}
+        }
       } catch {
         this.startSynth();
       }
@@ -363,6 +394,25 @@ class SoundEngine {
       this.startSynth();
     }
     this.notify();
+  }
+
+  syncToPosition(targetSeconds) {
+    if (!Number.isFinite(targetSeconds) || targetSeconds < 0) return;
+    if (this.audio) {
+      if (Math.abs(this.audio.currentTime - targetSeconds) > 0.75) {
+        try {
+          this.audio.currentTime = targetSeconds;
+          this.offset = targetSeconds;
+          this.notify();
+        } catch {}
+      }
+    } else {
+      if (Math.abs(this.seconds - targetSeconds) > 0.75) {
+        this.offset = targetSeconds;
+        this.started = performance.now();
+        this.notify();
+      }
+    }
   }
 
   pause() {

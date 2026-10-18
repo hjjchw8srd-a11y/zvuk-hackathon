@@ -41,6 +41,7 @@ class PartyConnectionManager:
     def __init__(self):
         self.active_connections: dict[str, list[WebSocket]] = {}
         self.main_loop: asyncio.AbstractEventLoop | None = None
+        self.playback_starts: dict[str, datetime] = {}
 
     def set_loop(self, loop: asyncio.AbstractEventLoop):
         self.main_loop = loop
@@ -489,6 +490,9 @@ def get_party_state(
         "playback": {
             "current_track_id": str(party.playback_track_id) if party.playback_track_id else None,
             "state": party.playback_state,
+            "started_at": party_manager.playback_starts.get(str(party.id)).isoformat() if (party.playback_state == "playing" and party.playback_track_id and party_manager.playback_starts.get(str(party.id))) else None,
+            "server_time": datetime.now(timezone.utc).isoformat(),
+            "elapsed_seconds": round(max(0.0, (datetime.now(timezone.utc) - party_manager.playback_starts[str(party.id)]).total_seconds()), 2) if (party.playback_state == "playing" and party.playback_track_id and party_manager.playback_starts.get(str(party.id))) else 0.0,
         },
     }
 
@@ -662,13 +666,23 @@ def play_party_track(
     party.playback_state = "playing"
     db.commit()
 
+    now_utc = datetime.now(timezone.utc)
+    party_manager.playback_starts[str(party.id)] = now_utc
+
+    playback_extra = {
+        "track_id": str(track_id),
+        "state": "playing",
+        "started_at": now_utc.isoformat(),
+        "server_time": now_utc.isoformat(),
+        "elapsed_seconds": 0.0,
+    }
     party_manager.notify_party(
         party.id,
         action="playback",
-        extra={"track_id": str(track_id), "state": "playing"},
+        extra=playback_extra,
     )
 
-    return {"ok": True, "state": "playing", "track_id": str(track_id)}
+    return {"ok": True, "track_id": str(track_id), **playback_extra}
 
 
 @router.post("/{party_id}/tracks/{track_id}/pause")
@@ -688,6 +702,7 @@ def pause_party_track(
 
     party.playback_state = "paused"
     db.commit()
+    party_manager.playback_starts.pop(str(party.id), None)
 
     party_manager.notify_party(
         party.id,
@@ -695,7 +710,7 @@ def pause_party_track(
         extra={"track_id": str(track_id), "state": "paused"},
     )
 
-    return {"ok": True, "state": "paused"}
+    return {"ok": True, "state": "paused", "track_id": str(track_id)}
 
 
 @router.post("/{party_id}/stop")
