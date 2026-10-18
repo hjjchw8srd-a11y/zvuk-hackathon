@@ -12,7 +12,7 @@ import {
   Copy, Check, Users, History, ShieldCheck, Trash2,
   CheckCircle, XCircle, Upload, ChevronUp, ChevronDown,
   Minus, Crown, UserPlus, Image as ImageIcon, Heart, Radio, Flag,
-  SlidersHorizontal, Bot,
+  SlidersHorizontal, Bot, Volume2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { audioService } from "@/lib/audioService";
@@ -302,7 +302,7 @@ export function PlaylistPage() {
   const [modQueue, setModQueue] = useState(INITIAL_MOD_QUEUE);
   const [history, setHistory] = useState([]);
   const [activeTab, setActiveTab] = useState("queue");
-  const [player, setPlayer] = useState({ trackId: null, playing: false, progress: 0, elapsed: 0 });
+  const [player, setPlayer] = useState({ trackId: null, playing: false, progress: 0, elapsed: 0, isBlockedByAutoplay: false });
   const [nextId, setNextId] = useState(200);
 
   // Модальные окна
@@ -701,6 +701,12 @@ export function PlaylistPage() {
 
   // Плеер: методы управления воспроизведением с реальным звуком
   const playTrack = useCallback(async (trackId) => {
+    if (audioService.isBlockedByAutoplay) {
+      audioService.unlock();
+      showToast("🔊 Звук совместного эфира включен!");
+      return;
+    }
+
     if (!canModerate) {
       if (player.trackId === trackId && player.playing) {
         audioService.unlock();
@@ -801,13 +807,19 @@ export function PlaylistPage() {
   }, [canModerate, tracks, player.trackId, currentRoomId, showToast]);
 
   const togglePlay = useCallback(async () => {
+    if (audioService.isBlockedByAutoplay) {
+      audioService.unlock();
+      showToast("🔊 Звук совместного эфира включен!");
+      return;
+    }
+
     if (!canModerate) {
       if (player.trackId && player.playing) {
         audioService.unlock();
         showToast("🎧 Вы слушаете общий эфир плейлиста");
-      } else {
-        showToast("⚠️ Управлять воспроизведением может только администратор");
+        return;
       }
+      showToast("⚠️ Управлять воспроизведением может только администратор");
       return;
     }
 
@@ -878,6 +890,7 @@ export function PlaylistPage() {
           playing: state.isPlaying,
           progress: state.progress,
           elapsed: state.seconds,
+          isBlockedByAutoplay: Boolean(state.isBlockedByAutoplay),
         });
       }
     });
@@ -885,6 +898,23 @@ export function PlaylistPage() {
       unsubscribe();
     };
   }, [playerNext, canModerate]);
+
+  // Автоматическая разблокировка звука на мобильных устройствах при любом первом касании экрана
+  useEffect(() => {
+    const handleGesture = () => {
+      if (audioService.isBlockedByAutoplay) {
+        audioService.unlock();
+      }
+    };
+    window.addEventListener("pointerdown", handleGesture, { passive: true });
+    window.addEventListener("touchstart", handleGesture, { passive: true });
+    window.addEventListener("click", handleGesture, { passive: true });
+    return () => {
+      window.removeEventListener("pointerdown", handleGesture);
+      window.removeEventListener("touchstart", handleGesture);
+      window.removeEventListener("click", handleGesture);
+    };
+  }, []);
 
   const handleToggleFavorite = async (trackId) => {
     const t = tracks.find((x) => x.id === trackId);
@@ -1467,7 +1497,7 @@ export function PlaylistPage() {
               key={track.id}
               track={track}
               rank={idx + 1}
-              isPlaying={player.trackId === track.id && player.playing}
+              isPlaying={player.trackId === track.id && player.playing && !player.isBlockedByAutoplay}
               isCurrent={player.trackId === track.id}
               canModerate={canModerate}
               onPlay={playTrack}
@@ -1555,10 +1585,20 @@ export function PlaylistPage() {
             </button>
             <button
               onClick={togglePlay}
-              title={canModerate ? (player.playing ? "Пауза для всех" : "Воспроизведение для всех") : (player.playing ? "Слушать общий эфир" : "Только администратор включает эфир")}
+              title={
+                player.isBlockedByAutoplay
+                  ? "Нажмите, чтобы включить звук на этом устройстве 🔊"
+                  : (canModerate
+                      ? (player.playing ? "Пауза для всех" : "Воспроизведение для всех")
+                      : (player.playing ? "Слушать общий эфир" : "Только администратор включает эфир"))
+              }
               className="w-10 h-10 flex items-center justify-center rounded-full bg-[#1c231d] border border-[#2e402d] text-white hover:bg-[#243025] hover:border-[#3c543b] transition-colors cursor-pointer"
             >
-              {player.playing ? <Pause size={17} className="fill-[#a3e635] text-[#a3e635]" /> : <Play size={17} className="fill-[#a3e635] text-[#a3e635] ml-0.5" />}
+              {player.playing && !player.isBlockedByAutoplay ? (
+                <Pause size={17} className="fill-[#a3e635] text-[#a3e635]" />
+              ) : (
+                <Play size={17} className="fill-[#a3e635] text-[#a3e635] ml-0.5" />
+              )}
             </button>
             <button
               onClick={playerNext}
@@ -1872,6 +1912,27 @@ export function PlaylistPage() {
         onOpenChange={setIsStreamerBotOpen}
         currentRoomCode={playlist?.code || "ZVUK26"}
       />
+      {/* ═══ ПЛАВАЮЩИЙ БАННЕР: ЗВУК ЗАБЛОКИРОВАН БРАУЗЕРОМ ═══════════════════ */}
+      {player.playing && player.isBlockedByAutoplay && (
+        <div
+          onClick={() => {
+            audioService.unlock();
+            showToast("🔊 Звук совместного эфира включен!");
+          }}
+          className="fixed bottom-24 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md z-50 bg-[#a3e635] text-black font-bold p-3.5 rounded-2xl shadow-2xl flex items-center justify-between gap-3 cursor-pointer border border-[#84cc16] animate-bounce"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Volume2 size={20} className="shrink-0 animate-pulse text-black" />
+            <div className="min-w-0">
+              <p className="text-xs font-bold leading-tight truncate">Эфир играет на других устройствах</p>
+              <p className="text-[11px] font-semibold opacity-90 truncate">Нажмите здесь, чтобы включить звук 🔊</p>
+            </div>
+          </div>
+          <span className="text-[11px] uppercase bg-black text-white px-2.5 py-1 rounded-xl shrink-0">
+            Включить
+          </span>
+        </div>
+      )}
     </div>
   );
 }

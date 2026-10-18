@@ -31,6 +31,9 @@ class SoundEngine {
     this.synthTimer = null;
     this.currentTrack = null;
     this.isPlaying = false;
+    this.isBlockedByAutoplay = false;
+    this.targetSyncOffset = null;
+    this.targetSyncTime = null;
     this.volume = 0.7;
     this.offset = 0;
     this.started = 0;
@@ -72,8 +75,38 @@ class SoundEngine {
     }, 250);
   }
 
+  seekAudio(audio, seconds) {
+    if (!audio || !Number.isFinite(seconds) || seconds < 0) return;
+    try {
+      if (audio.readyState >= 1) {
+        audio.currentTime = seconds;
+      } else {
+        const onLoaded = () => {
+          try { audio.currentTime = seconds; } catch {}
+          audio.removeEventListener("loadedmetadata", onLoaded);
+          audio.removeEventListener("canplay", onLoaded);
+        };
+        audio.addEventListener("loadedmetadata", onLoaded);
+        audio.addEventListener("canplay", onLoaded);
+      }
+    } catch {}
+  }
+
+  getLiveElapsed() {
+    if (this.targetSyncTime && this.targetSyncOffset !== null) {
+      const added = (performance.now() - this.targetSyncTime) / 1000;
+      return Math.max(0, this.targetSyncOffset + (this.isPlaying ? added : 0));
+    }
+    return this.offset;
+  }
+
   get seconds() {
-    if (this.audio) return this.audio.currentTime;
+    if (this.audio && !this.isBlockedByAutoplay && !this.audio.paused) {
+      return this.audio.currentTime;
+    }
+    if (this.targetSyncTime && this.targetSyncOffset !== null) {
+      return this.getLiveElapsed();
+    }
     return this.offset + (this.isPlaying ? (performance.now() - this.started) / 1000 : 0);
   }
 
@@ -104,6 +137,7 @@ class SoundEngine {
         fn({
           track: this.currentTrack,
           isPlaying: this.isPlaying,
+          isBlockedByAutoplay: this.isBlockedByAutoplay,
           seconds: this.seconds,
           duration: this.duration,
           progress: this.duration > 0 ? (this.seconds / this.duration) * 100 : 0,
@@ -302,15 +336,37 @@ class SoundEngine {
     this.setPreset("Flat");
   }
 
-  unlock() {
+  async unlock() {
     this.ensureAudioContext();
-    if (this.audio && this.isPlaying && this.audio.paused) {
-      this.audio.play().then(() => {
-        this.stopSynth();
-      }).catch(() => {});
-    } else if (this.isPlaying && !this.audio && this.currentTrack) {
-      this.play(this.currentTrack).catch(() => {});
+    if (this.context && this.context.state === "suspended") {
+      try {
+        await this.context.resume();
+      } catch {}
     }
+
+    if (this.currentTrack && this.isPlaying) {
+      const liveSeconds = this.getLiveElapsed();
+      if (this.audio) {
+        this.seekAudio(this.audio, liveSeconds);
+        try {
+          await this.audio.play();
+          this.isBlockedByAutoplay = false;
+          this.stopSynth();
+        } catch (e) {
+          console.warn("Audio unlock play failed:", e);
+        }
+      } else {
+        this.offset = liveSeconds;
+        this.started = performance.now();
+        this.startSynth();
+        if (this.context?.state === "running") {
+          this.isBlockedByAutoplay = false;
+        }
+      }
+    } else {
+      this.isBlockedByAutoplay = false;
+    }
+    this.notify();
   }
 
   async play(track, audioUrl = null, startOffsetSeconds = 0) {
@@ -319,13 +375,15 @@ class SoundEngine {
     this.ensureAudioContext();
 
     const targetOffset = (typeof startOffsetSeconds === "number" && startOffsetSeconds > 0) ? startOffsetSeconds : 0;
+    this.targetSyncOffset = targetOffset;
+    this.targetSyncTime = performance.now();
 
     // If same track
     if (this.currentTrack?.id === track.id) {
       if (targetOffset > 0) {
         if (this.audio) {
           if (Math.abs(this.audio.currentTime - targetOffset) > 0.75) {
-            try { this.audio.currentTime = targetOffset; } catch {}
+            this.seekAudio(this.audio, targetOffset);
           }
         } else {
           if (Math.abs(this.seconds - targetOffset) > 0.75) {
@@ -335,11 +393,20 @@ class SoundEngine {
         }
       }
 
-      if (!this.isPlaying) {
+      if (!this.isPlaying || this.isBlockedByAutoplay) {
         this.isPlaying = true;
         this.started = performance.now();
         if (this.audio) {
-          await this.audio.play();
+          try {
+            await this.audio.play();
+            this.isBlockedByAutoplay = false;
+          } catch (err) {
+            if (err.name === "NotAllowedError" || err.name === "SecurityError") {
+              this.isBlockedByAutoplay = true;
+            } else {
+              this.startSynth();
+            }
+          }
         } else {
           this.startSynth();
         }
@@ -360,6 +427,12 @@ class SoundEngine {
       funk90: "/audio/90_seconds_of_funk.mp3",
       cents5: "/audio/5_cents_back.mp3",
       fallingsky: "/audio/falling_sky.mp3",
+      dawn: "/audio/bustin_loose.mp3",
+      city: "/audio/90_seconds_of_funk.mp3",
+      orbit: "/audio/falling_sky.mp3",
+      rain: "/audio/5_cents_back.mp3",
+      night: "/audio/falling_sky.mp3",
+      sea: "/audio/90_seconds_of_funk.mp3",
     };
     const key = track.library_key || track.key;
     const directFile = fileMap[key];
@@ -372,23 +445,21 @@ class SoundEngine {
       const audio = this.getAudioElement();
       audio.src = streamUrl;
       if (targetOffset > 0) {
-        const onLoaded = () => {
-          try {
-            audio.currentTime = targetOffset;
-          } catch {}
-          audio.removeEventListener("loadedmetadata", onLoaded);
-          audio.removeEventListener("canplay", onLoaded);
-        };
-        audio.addEventListener("loadedmetadata", onLoaded);
-        audio.addEventListener("canplay", onLoaded);
+        this.seekAudio(audio, targetOffset);
       }
       try {
         await audio.play();
+        this.isBlockedByAutoplay = false;
         if (targetOffset > 0 && Math.abs(audio.currentTime - targetOffset) > 0.75) {
-          try { audio.currentTime = targetOffset; } catch {}
+          this.seekAudio(audio, targetOffset);
         }
-      } catch {
-        this.startSynth();
+      } catch (err) {
+        if (err.name === "NotAllowedError" || err.name === "SecurityError") {
+          console.warn("Autoplay blocked on this device. Waiting for user interaction to unmute.");
+          this.isBlockedByAutoplay = true;
+        } else {
+          this.startSynth();
+        }
       }
     } else {
       this.startSynth();
@@ -398,16 +469,17 @@ class SoundEngine {
 
   syncToPosition(targetSeconds) {
     if (!Number.isFinite(targetSeconds) || targetSeconds < 0) return;
+    this.targetSyncOffset = targetSeconds;
+    this.targetSyncTime = performance.now();
+
     if (this.audio) {
-      if (Math.abs(this.audio.currentTime - targetSeconds) > 0.75) {
-        try {
-          this.audio.currentTime = targetSeconds;
-          this.offset = targetSeconds;
-          this.notify();
-        } catch {}
+      if (!this.isBlockedByAutoplay && Math.abs(this.audio.currentTime - targetSeconds) > 0.8) {
+        this.seekAudio(this.audio, targetSeconds);
+        this.offset = targetSeconds;
+        this.notify();
       }
     } else {
-      if (Math.abs(this.seconds - targetSeconds) > 0.75) {
+      if (Math.abs(this.seconds - targetSeconds) > 0.8) {
         this.offset = targetSeconds;
         this.started = performance.now();
         this.notify();
@@ -419,6 +491,9 @@ class SoundEngine {
     if (!this.isPlaying) return;
     this.offset = this.seconds;
     this.isPlaying = false;
+    this.isBlockedByAutoplay = false;
+    this.targetSyncOffset = null;
+    this.targetSyncTime = null;
     if (this.audio) this.audio.pause();
     this.stopSynth();
     this.notify();
@@ -433,6 +508,7 @@ class SoundEngine {
     this.stopSynth();
     this.offset = 0;
     this.currentTrack = null;
+    this.isBlockedByAutoplay = false;
     this.notify();
   }
 

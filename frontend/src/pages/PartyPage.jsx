@@ -30,6 +30,7 @@ import {
   Flag,
   SlidersHorizontal,
   Bot,
+  Volume2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { audioService } from "@/lib/audioService";
@@ -188,6 +189,7 @@ export function PartyPage() {
     playing: false,
     progress: 0,
     elapsed: 0,
+    isBlockedByAutoplay: false,
   });
 
   const showToast = useCallback((msg) => {
@@ -196,13 +198,19 @@ export function PartyPage() {
     toastTimer.current = setTimeout(() => setToast(null), 3500);
   }, []);
 
-  // Unlock audio on click
+  // Unlock audio on click / touch
   useEffect(() => {
-    const unlock = () => audioService.unlock();
-    window.addEventListener("pointerdown", unlock);
-    window.addEventListener("keydown", unlock);
+    const unlock = () => {
+      if (audioService.isBlockedByAutoplay) {
+        audioService.unlock();
+      }
+    };
+    window.addEventListener("pointerdown", unlock, { passive: true });
+    window.addEventListener("touchstart", unlock, { passive: true });
+    window.addEventListener("keydown", unlock, { passive: true });
     return () => {
       window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("touchstart", unlock);
       window.removeEventListener("keydown", unlock);
     };
   }, []);
@@ -216,6 +224,7 @@ export function PartyPage() {
           playing: state.isPlaying,
           progress: state.progress,
           elapsed: state.seconds,
+          isBlockedByAutoplay: Boolean(state.isBlockedByAutoplay),
         });
       }
     });
@@ -631,6 +640,13 @@ export function PartyPage() {
   // Host playback control
   const handlePlayTrack = async (track) => {
     if (!activePartyId) return;
+
+    if (audioService.isBlockedByAutoplay) {
+      audioService.unlock();
+      showToast("🔊 Звук тусовки включен!");
+      return;
+    }
+
     const isHost = partyState?.is_host;
 
     if (!isHost) {
@@ -1123,6 +1139,7 @@ export function PartyPage() {
                   partyState?.playback?.current_track_id === track.id;
                 const isPlaying =
                   isCurrent &&
+                  !player.isBlockedByAutoplay &&
                   ((player.trackId === track.id && player.playing) ||
                    (partyState?.playback?.current_track_id === track.id && partyState?.playback?.state === "playing"));
                 const medals = ["🥇", "🥈", "🥉"];
@@ -1289,9 +1306,13 @@ export function PartyPage() {
                 if (currentPlayingTrack) handlePlayTrack(currentPlayingTrack);
               }}
               className="w-10 h-10 flex items-center justify-center rounded-full bg-[#1c231d] border border-[#2e402d] text-white hover:bg-[#243025] transition-colors cursor-pointer"
-              title={isHost ? "Хост: Play / Pause для всех" : "Слушать локально"}
+              title={
+                player.isBlockedByAutoplay
+                  ? "Нажмите, чтобы включить звук тусовки 🔊"
+                  : (isHost ? "Хост: Play / Pause для всех" : "Слушать локально")
+              }
             >
-              {player.playing ? (
+              {player.playing && !player.isBlockedByAutoplay ? (
                 <Pause size={17} className="fill-[#a3e635] text-[#a3e635]" />
               ) : (
                 <Play size={17} className="fill-[#a3e635] text-[#a3e635] ml-0.5" />
@@ -1570,6 +1591,27 @@ export function PartyPage() {
         onOpenChange={setIsStreamerBotOpen}
         currentRoomCode={partyState?.party?.invite_code || "ZVUK26"}
       />
+      {/* ═══ ПЛАВАЮЩИЙ БАННЕР: ЗВУК ЗАБЛОКИРОВАН БРАУЗЕРОМ ═══════════════════ */}
+      {player.playing && player.isBlockedByAutoplay && (
+        <div
+          onClick={() => {
+            audioService.unlock();
+            showToast("🔊 Звук тусовки включен!");
+          }}
+          className="fixed bottom-24 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md z-50 bg-[#a3e635] text-black font-bold p-3.5 rounded-2xl shadow-2xl flex items-center justify-between gap-3 cursor-pointer border border-[#84cc16] animate-bounce"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <Volume2 size={20} className="shrink-0 animate-pulse text-black" />
+            <div className="min-w-0">
+              <p className="text-xs font-bold leading-tight truncate">Тусовка играет на других устройствах</p>
+              <p className="text-[11px] font-semibold opacity-90 truncate">Нажмите здесь, чтобы включить звук 🔊</p>
+            </div>
+          </div>
+          <span className="text-[11px] uppercase bg-black text-white px-2.5 py-1 rounded-xl shrink-0">
+            Включить
+          </span>
+        </div>
+      )}
     </div>
   );
 }
