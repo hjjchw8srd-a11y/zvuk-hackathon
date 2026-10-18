@@ -84,14 +84,22 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
         headers,
         body: JSON.stringify({ text: textToRun }),
       });
-      const data = await res.json();
-      if (res.ok) {
+      let data = null;
+      try {
+        data = await res.json();
+      } catch {
+        // Response was not JSON (e.g. Nginx 502 during restart)
+      }
+      if (res.ok && data) {
         setTestResult({ ok: true, data });
       } else {
-        setTestResult({ ok: false, error: data.detail || "Ошибка симуляции" });
+        setTestResult({
+          ok: false,
+          error: data?.detail || `Ошибка сервера: HTTP ${res.status} ${res.statusText || ""}`,
+        });
       }
-    } catch {
-      setTestResult({ ok: false, error: "Не удалось связаться с сервером" });
+    } catch (err) {
+      setTestResult({ ok: false, error: `Ошибка связи: ${err?.message || "сервер не отвечает"}` });
     } finally {
       setTesting(false);
       setTimeout(() => {
