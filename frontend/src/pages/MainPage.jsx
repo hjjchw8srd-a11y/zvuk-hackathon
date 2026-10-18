@@ -186,7 +186,10 @@ export function MainPage() {
     if (isPlayingPreview) {
       audioService.pause();
     } else {
-      audioService.play(currentTrack);
+      audioService.play({
+        ...currentTrack,
+        room_id: currentTrack.room_id || activeCommunity?.id,
+      });
     }
   };
 

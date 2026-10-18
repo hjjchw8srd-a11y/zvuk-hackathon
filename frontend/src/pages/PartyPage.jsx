@@ -273,7 +273,7 @@ export function PartyPage() {
               if (audioService.currentTrack?.id !== tr.id || !audioService.isPlaying) {
                 audioService.play({
                   ...tr,
-                  library_key: tr.library_key || "bustin",
+                  library_key: tr.source_type === "upload" ? null : (tr.library_key || "bustin"),
                 }, null, elapsedSec).catch(() => {});
               } else {
                 audioService.syncToPosition(elapsedSec);
@@ -281,10 +281,12 @@ export function PartyPage() {
             }
           }
         } else if (pb.state === "paused") {
-          if (audioService.isPlaying) {
-            audioService.pause();
+          if (canModerate || (pb.current_track_id && String(audioService.currentTrack?.id) === String(pb.current_track_id))) {
+            if (audioService.isPlaying) {
+              audioService.pause();
+            }
+            setPlayer((p) => ({ ...p, playing: false }));
           }
-          setPlayer((p) => ({ ...p, playing: false }));
         }
       }
     } catch {
@@ -654,10 +656,10 @@ export function PartyPage() {
         return;
       }
       isLocallyPausedRef.current = false;
-      await audioService.unlock();
+      audioService.unlock().catch(() => {});
       await audioService.play({
         ...track,
-        library_key: track.library_key || "bustin",
+        library_key: track.source_type === "upload" ? null : (track.library_key || "bustin"),
       });
       setPlayer({ trackId: track.id, playing: true, progress: 0, elapsed: 0 });
       showToast(`🎧 Локальное воспроизведение: ${track.title}`);
@@ -667,7 +669,7 @@ export function PartyPage() {
     const token = localStorage.getItem("token");
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
     isLocallyPausedRef.current = false;
-    await audioService.unlock();
+    audioService.unlock().catch(() => {});
 
     if (player.trackId === track.id && player.playing) {
       audioService.pause();
@@ -679,7 +681,7 @@ export function PartyPage() {
     } else {
       await audioService.play({
         ...track,
-        library_key: track.library_key || "bustin",
+        library_key: track.source_type === "upload" ? null : (track.library_key || "bustin"),
       });
       setPlayer({ trackId: track.id, playing: true, progress: 0, elapsed: 0 });
       await fetch(`/api/parties/${activePartyId}/tracks/${track.id}/play`, {

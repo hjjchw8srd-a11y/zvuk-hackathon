@@ -65,6 +65,15 @@ class SoundEngine {
     this.listeners = new Set();
     this.equalizerListeners = new Set();
 
+    if (typeof window !== "undefined") {
+      const handleGesture = () => {
+        this.unlock().catch(() => {});
+      };
+      window.addEventListener("pointerdown", handleGesture, { passive: true });
+      window.addEventListener("touchstart", handleGesture, { passive: true });
+      window.addEventListener("keydown", handleGesture, { passive: true });
+    }
+
     this.timer = setInterval(() => {
       if (this.isPlaying) {
         this.notify();
@@ -256,7 +265,19 @@ class SoundEngine {
       }
     });
     audio.addEventListener("error", (e) => {
-      console.warn("Audio playback error, falling back to synth:", e);
+      console.warn("Audio playback error:", e);
+      // Fallback: If CORS prevented loading with crossOrigin="anonymous", retry directly without crossOrigin
+      if (audio.crossOrigin) {
+        console.warn("Retrying playback without crossOrigin attribute...");
+        audio.removeAttribute("crossOrigin");
+        audio.load();
+        if (this.isPlaying) {
+          audio.play().catch(() => {
+            if (this.isPlaying) this.startSynth();
+          });
+        }
+        return;
+      }
       if (this.isPlaying) this.startSynth();
     });
 
@@ -277,6 +298,8 @@ class SoundEngine {
       this.audio.volume = 1.0;
     } catch (err) {
       console.warn("Could not create MediaElementSourceNode:", err);
+      // Fallback directly to audio element volume so sound is not silenced
+      this.audio.volume = this.volume;
     }
   }
 
@@ -359,11 +382,12 @@ class SoundEngine {
   async unlock() {
     this.ensureAudioContext();
     if (this.context && this.context.state === "suspended") {
-      try {
-        await this.context.resume();
-      } catch {}
+      this.context.resume().then(() => {
+        this.attachAudioElementSource();
+      }).catch(() => {});
+    } else if (this.context && this.context.state === "running") {
+      this.attachAudioElementSource();
     }
-    this.attachAudioElementSource();
 
     if (this.currentTrack && this.isPlaying) {
       const liveSeconds = this.getLiveElapsed();
@@ -458,15 +482,35 @@ class SoundEngine {
       night: "/audio/falling_sky.mp3",
       sea: "/audio/90_seconds_of_funk.mp3",
     };
-    const key = track.library_key || track.key;
-    const directFile = fileMap[key];
 
-    const streamUrl = directFile || audioUrl || track.audio_url || (track.id && track.room_id && track.source_type === "upload"
-      ? `/api/communities/${track.room_id}/tracks/${track.id}/audio`
-      : null);
+    const isUpload = track.source_type === "upload" || Boolean(track.storage_key);
+    let streamUrl = null;
+
+    if (isUpload) {
+      const roomId = track.room_id || track.community_id;
+      if (roomId && track.id) {
+        streamUrl = `/api/communities/${roomId}/tracks/${track.id}/audio`;
+      } else if (track.storage_key) {
+        streamUrl = `/uploads/${track.storage_key}`;
+      } else if (audioUrl || track.audio_url) {
+        streamUrl = audioUrl || track.audio_url;
+      }
+    } else {
+      const key = track.library_key || track.key;
+      const directFile = key ? fileMap[key] : null;
+      const roomId = track.room_id || track.community_id;
+      streamUrl =
+        directFile ||
+        audioUrl ||
+        track.audio_url ||
+        (roomId && track.id ? `/api/communities/${roomId}/tracks/${track.id}/audio` : "/audio/bustin_loose.mp3");
+    }
 
     if (streamUrl) {
       const audio = this.getAudioElement();
+      if (!audio.crossOrigin) {
+        audio.crossOrigin = "anonymous";
+      }
       audio.src = streamUrl;
       if (targetOffset > 0) {
         this.seekAudio(audio, targetOffset);

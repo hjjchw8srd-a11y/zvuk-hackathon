@@ -510,7 +510,7 @@ export function PlaylistPage() {
                   audioService.play({
                     ...trackToPlay,
                     room_id: roomId,
-                    library_key: trackToPlay.library_key || "dawn",
+                    library_key: trackToPlay.source_type === "upload" ? null : (trackToPlay.library_key || "dawn"),
                   }, null, elapsedSec).catch(() => {});
                   setPlayer({
                     trackId: trackToPlay.id,
@@ -523,14 +523,16 @@ export function PlaylistPage() {
                 }
               }
             } else if (pb.state === "paused") {
-              if (audioService.isPlaying) {
-                audioService.pause();
+              if (canModerate || (pb.current_track_id && String(audioService.currentTrack?.id) === String(pb.current_track_id))) {
+                if (audioService.isPlaying) {
+                  audioService.pause();
+                }
+                setPlayer((p) => ({
+                  ...p,
+                  trackId: pb.current_track_id || p.trackId,
+                  playing: false,
+                }));
               }
-              setPlayer((p) => ({
-                ...p,
-                trackId: pb.current_track_id || p.trackId,
-                playing: false,
-              }));
             }
           }
 
@@ -605,12 +607,14 @@ export function PlaylistPage() {
             if (data?.type === "room_updated") {
               if (data.action === "playback") {
                 if (data.state === "paused") {
-                  audioService.pause();
-                  setPlayer((p) => ({
-                    ...p,
-                    trackId: data.track_id || p.trackId,
-                    playing: false,
-                  }));
+                  if (canModerate || (data.track_id && String(audioService.currentTrack?.id) === String(data.track_id))) {
+                    audioService.pause();
+                    setPlayer((p) => ({
+                      ...p,
+                      trackId: data.track_id || p.trackId,
+                      playing: false,
+                    }));
+                  }
                 } else if (data.state === "playing" && data.track_id) {
                   let elapsedSec = 0;
                   if (typeof data.elapsed_seconds === "number") {
@@ -633,7 +637,7 @@ export function PlaylistPage() {
                       audioService.play({
                         ...targetTrack,
                         room_id: currentRoomId,
-                        library_key: targetTrack.library_key || "dawn",
+                        library_key: targetTrack.source_type === "upload" ? null : (targetTrack.library_key || "dawn"),
                       }, null, elapsedSec).catch(() => {});
                       setPlayer({
                         trackId: targetTrack.id,
@@ -716,14 +720,14 @@ export function PlaylistPage() {
 
   // Плеер: методы управления воспроизведением с реальным звуком
   const playTrack = useCallback(async (trackId) => {
+    audioService.unlock().catch(() => {});
     if (audioService.isBlockedByAutoplay) {
-      await audioService.unlock();
       showToast("🔊 Звук совместного эфира включен!");
     }
 
     if (!canModerate) {
       // Если трек уже играет -> пауза на этом устройстве
-      if (player.trackId === trackId && player.playing) {
+      if (String(player.trackId) === String(trackId) && player.playing) {
         isLocallyPausedRef.current = true;
         audioService.pause();
         setPlayer((p) => ({ ...p, playing: false }));
@@ -731,29 +735,27 @@ export function PlaylistPage() {
         return;
       }
       // Иначе запускаем локально
-      const track = tracks.find((t) => t.id === trackId);
+      const track = tracks.find((t) => String(t.id) === String(trackId));
       if (!track) return;
       isLocallyPausedRef.current = false;
-      await audioService.unlock();
       await audioService.play({
         ...track,
         room_id: currentRoomId,
-        library_key: track.library_key || "dawn",
+        library_key: track.source_type === "upload" ? null : (track.library_key || "dawn"),
       });
       setPlayer({ trackId, playing: true, progress: 0, elapsed: 0 });
       showToast(`🎧 Локальное воспроизведение: ${track.title}`);
       return;
     }
 
-    const track = tracks.find((t) => t.id === trackId);
+    const track = tracks.find((t) => String(t.id) === String(trackId));
     if (!track) return;
 
     const token = localStorage.getItem("token");
     const headers = token ? { Authorization: `Bearer ${token}` } : {};
     isLocallyPausedRef.current = false;
-    await audioService.unlock();
 
-    if (player.trackId === trackId && player.playing) {
+    if (String(player.trackId) === String(trackId) && player.playing) {
       try {
         if (currentRoomId) {
           const response = await fetch(`/api/communities/${currentRoomId}/tracks/${trackId}/pause`, {
@@ -787,7 +789,7 @@ export function PlaylistPage() {
         await audioService.play({
           ...track,
           room_id: currentRoomId,
-          library_key: track.library_key || "dawn",
+          library_key: track.source_type === "upload" ? null : (track.library_key || "dawn"),
         }, null, elapsed);
         setPlayer({ trackId, playing: true, progress: 0, elapsed });
       } catch (error) {
@@ -799,24 +801,23 @@ export function PlaylistPage() {
   const playerNext = useCallback(async () => {
     const s = sortedTracks(tracks);
     if (!s.length) return;
-    const idx = s.findIndex((t) => t.id === player.trackId);
+    const idx = s.findIndex((t) => String(t.id) === String(player.trackId));
     const next = s[(idx + 1) % s.length];
 
+    audioService.unlock().catch(() => {});
+    isLocallyPausedRef.current = false;
+
     if (!canModerate) {
-      isLocallyPausedRef.current = false;
-      await audioService.unlock();
       await audioService.play({
         ...next,
         room_id: currentRoomId,
-        library_key: next.library_key || "dawn",
+        library_key: next.source_type === "upload" ? null : (next.library_key || "dawn"),
       });
       setPlayer({ trackId: next.id, playing: true, progress: 0, elapsed: 0 });
       showToast(`🎧 Локальное воспроизведение: ${next.title}`);
       return;
     }
 
-    await audioService.unlock();
-    isLocallyPausedRef.current = false;
     try {
       if (currentRoomId) {
         const token = localStorage.getItem("token");
@@ -833,7 +834,7 @@ export function PlaylistPage() {
       await audioService.play({
         ...next,
         room_id: currentRoomId,
-        library_key: next.library_key || "dawn",
+        library_key: next.source_type === "upload" ? null : (next.library_key || "dawn"),
       });
       setPlayer({ trackId: next.id, playing: true, progress: 0, elapsed: 0 });
     } catch (error) {
@@ -844,24 +845,23 @@ export function PlaylistPage() {
   const playerPrev = useCallback(async () => {
     const s = sortedTracks(tracks);
     if (!s.length) return;
-    const idx = s.findIndex((t) => t.id === player.trackId);
+    const idx = s.findIndex((t) => String(t.id) === String(player.trackId));
     const prev = s[(idx - 1 + s.length) % s.length];
 
+    audioService.unlock().catch(() => {});
+    isLocallyPausedRef.current = false;
+
     if (!canModerate) {
-      isLocallyPausedRef.current = false;
-      await audioService.unlock();
       await audioService.play({
         ...prev,
         room_id: currentRoomId,
-        library_key: prev.library_key || "dawn",
+        library_key: prev.source_type === "upload" ? null : (prev.library_key || "dawn"),
       });
       setPlayer({ trackId: prev.id, playing: true, progress: 0, elapsed: 0 });
       showToast(`🎧 Локальное воспроизведение: ${prev.title}`);
       return;
     }
 
-    await audioService.unlock();
-    isLocallyPausedRef.current = false;
     try {
       if (currentRoomId) {
         const token = localStorage.getItem("token");
@@ -878,7 +878,7 @@ export function PlaylistPage() {
       await audioService.play({
         ...prev,
         room_id: currentRoomId,
-        library_key: prev.library_key || "dawn",
+        library_key: prev.source_type === "upload" ? null : (prev.library_key || "dawn"),
       });
       setPlayer({ trackId: prev.id, playing: true, progress: 0, elapsed: 0 });
     } catch (error) {
@@ -887,11 +887,9 @@ export function PlaylistPage() {
   }, [canModerate, tracks, player.trackId, currentRoomId, showToast]);
 
   const togglePlay = useCallback(async () => {
+    audioService.unlock().catch(() => {});
     if (audioService.isBlockedByAutoplay) {
-      isLocallyPausedRef.current = false;
-      await audioService.unlock();
       showToast("🔊 Звук совместного эфира включен!");
-      return;
     }
 
     if (!canModerate) {
@@ -903,13 +901,12 @@ export function PlaylistPage() {
         return;
       } else {
         isLocallyPausedRef.current = false;
-        await audioService.unlock();
-        const currentT = tracks.find((t) => t.id === player.trackId) || sortedTracks(tracks)[0];
+        const currentT = tracks.find((t) => String(t.id) === String(player.trackId)) || sortedTracks(tracks)[0];
         if (currentT) {
           await audioService.play({
             ...currentT,
             room_id: currentRoomId,
-            library_key: currentT.library_key || "dawn",
+            library_key: currentT.source_type === "upload" ? null : (currentT.library_key || "dawn"),
           }, null, player.elapsed || 0);
           setPlayer((p) => ({ ...p, playing: true, trackId: currentT.id }));
           showToast("▶️ Воспроизведение включено");
@@ -943,9 +940,8 @@ export function PlaylistPage() {
         showToast(`⚠️ ${error.message}`);
       }
     } else if (player.trackId) {
-      const track = tracks.find((t) => t.id === player.trackId);
+      const track = tracks.find((t) => String(t.id) === String(player.trackId));
       if (track) {
-        await audioService.unlock();
         try {
           let elapsed = player.elapsed || 0;
           if (currentRoomId) {
@@ -962,7 +958,7 @@ export function PlaylistPage() {
           await audioService.play({
             ...track,
             room_id: currentRoomId,
-            library_key: track.library_key || "dawn",
+            library_key: track.source_type === "upload" ? null : (track.library_key || "dawn"),
           }, null, elapsed);
           setPlayer((p) => ({ ...p, playing: true, elapsed }));
         } catch (error) {

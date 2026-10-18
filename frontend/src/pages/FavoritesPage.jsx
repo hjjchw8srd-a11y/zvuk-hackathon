@@ -93,7 +93,7 @@ export function FavoritesPage() {
         artist: track.artist,
         room_id: track.room_id,
         source_type: track.source_type,
-        library_key: track.library_key || "dawn",
+        library_key: track.source_type === "upload" ? null : (track.library_key || "dawn"),
         duration_seconds: track.duration_seconds || 45,
       });
       setPlayingId(track.id);

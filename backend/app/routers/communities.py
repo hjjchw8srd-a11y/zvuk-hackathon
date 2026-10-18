@@ -250,6 +250,19 @@ def _uploads_dir() -> Path:
     return path if path.is_absolute() else BACKEND_DIR / path
 
 
+def _audio_dir() -> Path:
+    for candidate in [
+        BACKEND_DIR.parent / "frontend" / "public" / "audio",
+        BACKEND_DIR.parent / "frontend" / "dist" / "audio",
+        BACKEND_DIR / "uploads",
+    ]:
+        if candidate.exists() and candidate.is_dir():
+            return candidate
+    fallback = BACKEND_DIR.parent / "frontend" / "public" / "audio"
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback
+
+
 def _member(db: Session, room_id: uuid.UUID, user_id: uuid.UUID) -> RoomMember:
     membership = db.get(RoomMember, (room_id, user_id))
     if membership is None:
@@ -543,15 +556,29 @@ def _community_state(db: Session, room: Room, membership: RoomMember, user: User
             )
         rank = ranked.get(track.id)
         fair_score = rank.fair_score if rank else float(vote_score)
+        audio_url = None
+        if track.source_type == TrackSource.UPLOAD and track.storage_key:
+            audio_url = f"/api/communities/{room.id}/tracks/{track.id}/audio"
+        elif track.source_type == TrackSource.LIBRARY and track.library_key:
+            lib_item = next((it for it in LIBRARY if it.get("key") == track.library_key), None)
+            if lib_item and lib_item.get("file"):
+                audio_url = f"/audio/{lib_item['file']}"
+            else:
+                audio_url = f"/api/communities/{room.id}/tracks/{track.id}/audio"
+
         tracks_payload.append(
             {
                 "id": track.id,
+                "room_id": room.id,
+                "community_id": room.id,
                 "title": track.title,
                 "artist": track.artist,
                 "genre": track.genre,
                 "duration_seconds": track.duration_seconds,
                 "source_type": track.source_type.value,
                 "library_key": track.library_key,
+                "storage_key": getattr(track, "storage_key", None),
+                "audio_url": audio_url,
                 "status": track.moderation_status.value,
                 "created_by": track.created_by_user_id,
                 "created_at": track.created_at,
@@ -1180,7 +1207,7 @@ def report_track(
     }
 
 
-@router.get("/communities/{room_id}/tracks/{track_id}/audio")
+@router.api_route("/communities/{room_id}/tracks/{track_id}/audio", methods=["GET", "HEAD"])
 def track_audio(
     room_id: uuid.UUID,
     track_id: uuid.UUID,
@@ -1189,17 +1216,56 @@ def track_audio(
     track = db.get(Track, track_id)
     if track is not None and getattr(track, "is_admin_banned", False):
         raise HTTPException(status_code=403, detail="Трек заблокирован администратором платформы")
-    if track is None or track.room_id != room_id or track.source_type != TrackSource.UPLOAD or not track.storage_key:
+    if track is None or track.room_id != room_id:
         raise HTTPException(status_code=404, detail="Аудиофайл не найден")
-    path = (_uploads_dir() / track.storage_key).resolve()
-    if path.parent != _uploads_dir().resolve() or not path.is_file():
+
+    cors_headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
+        "Access-Control-Allow-Headers": "*",
+        "Accept-Ranges": "bytes",
+    }
+
+    if track.source_type == TrackSource.UPLOAD and track.storage_key:
+        path = (_uploads_dir() / track.storage_key).resolve()
+        if path.parent != _uploads_dir().resolve() or not path.is_file():
+            raise HTTPException(status_code=404, detail="Аудиофайл не найден")
+        return FileResponse(
+            path,
+            media_type=track.mime_type or "audio/mpeg",
+            filename=track.original_filename or path.name,
+            content_disposition_type="inline",
+            headers=cors_headers,
+        )
+    elif track.source_type == TrackSource.LIBRARY and track.library_key:
+        lib_item = next((item for item in LIBRARY if item.get("key") == track.library_key), None)
+        file_name = lib_item.get("file") if lib_item else None
+        if not file_name:
+            file_map = {
+                "bustin": "bustin_loose.mp3",
+                "funk90": "90_seconds_of_funk.mp3",
+                "cents5": "5_cents_back.mp3",
+                "fallingsky": "falling_sky.mp3",
+                "dawn": "bustin_loose.mp3",
+                "city": "90_seconds_of_funk.mp3",
+                "orbit": "5_cents_back.mp3",
+                "rain": "falling_sky.mp3",
+                "night": "bustin_loose.mp3",
+                "sea": "90_seconds_of_funk.mp3",
+            }
+            file_name = file_map.get(track.library_key, "bustin_loose.mp3")
+        path = (_audio_dir() / file_name).resolve()
+        if path.is_file():
+            return FileResponse(
+                path,
+                media_type="audio/mpeg",
+                filename=file_name,
+                content_disposition_type="inline",
+                headers=cors_headers,
+            )
         raise HTTPException(status_code=404, detail="Аудиофайл не найден")
-    return FileResponse(
-        path,
-        media_type=track.mime_type or "audio/mpeg",
-        filename=track.original_filename or path.name,
-        content_disposition_type="inline",
-    )
+
+    raise HTTPException(status_code=404, detail="Аудиофайл не найден")
 
 
 @router.post("/communities/{room_id}/tracks/{track_id}/vote")

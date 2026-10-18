@@ -153,17 +153,10 @@ async def root_ws_community(websocket: WebSocket, room_id: uuid.UUID):
 async def root_ws_party(websocket: WebSocket, party_id: uuid.UUID):
     await ws_party_endpoint(websocket, party_id)
 
-# ── CORS ────────────────────────────────────────────────────────────────────
-# allow_origins=["*"] + allow_credentials не работают вместе в браузере.
-# Используем allow_origin_regex, чтобы принимать запросы с любого хоста
-# локальной сети (192.168.x.x, 10.x.x.x, 172.16-31.x.x, localhost, 127.0.0.1).
+# Принимаем запросы с любого HTTP/HTTPS хоста (localhost, LAN, tunnel, Cloudflare, публичный IP)
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=(
-        r"http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|"
-        r"172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)"
-        r"(:\d+)?"
-    ),
+    allow_origin_regex=r"^https?://.*$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -178,7 +171,7 @@ app.include_router(superadmin.router)
 app.include_router(integrations.router)
 
 
-# ── Сервинг загружённых аудиофайлов ─────────────────────────────────────────
+# ── Сервинг загружённых аудиофайлов и фонотеки ──────────────────────────────
 def _uploads_dir() -> Path:
     path = settings.uploads_dir
     uploads = path if path.is_absolute() else BACKEND_DIR / path
@@ -186,7 +179,21 @@ def _uploads_dir() -> Path:
     return uploads
 
 
+def _audio_dir() -> Path:
+    for candidate in [
+        BACKEND_DIR.parent / "frontend" / "public" / "audio",
+        BACKEND_DIR.parent / "frontend" / "dist" / "audio",
+        BACKEND_DIR / "uploads",
+    ]:
+        if candidate.exists() and candidate.is_dir():
+            return candidate
+    fallback = BACKEND_DIR.parent / "frontend" / "public" / "audio"
+    fallback.mkdir(parents=True, exist_ok=True)
+    return fallback
+
+
 app.mount("/uploads", StaticFiles(directory=str(_uploads_dir())), name="uploads")
+app.mount("/audio", StaticFiles(directory=str(_audio_dir())), name="audio")
 
 
 # ── Служебные эндпоинты ──────────────────────────────────────────────────────

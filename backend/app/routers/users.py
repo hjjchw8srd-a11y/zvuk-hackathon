@@ -116,6 +116,7 @@ def get_my_tracks(
                 "genre": track.genre,
                 "duration_seconds": track.duration_seconds,
                 "source_type": track.source_type.value,
+                "library_key": track.library_key,
                 "moderation_status": track.moderation_status.value,
                 "room_id": track.room_id,
                 "room_name": room_name,
