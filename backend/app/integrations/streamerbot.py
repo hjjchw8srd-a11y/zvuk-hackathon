@@ -157,17 +157,31 @@ def handle_chat_command(
         return CommandResult(reply=None)
 
     room = _configured_room(db)
+    from app.models import PartySession, PartyQueueItem
+    from app.routers.parties import party_manager
+
+    # 1. Resolve active PartySession if any
+    party = None
+    code = (settings.streamerbot_room_code or "").strip().upper()
+    if code:
+        party = db.scalar(select(PartySession).where(PartySession.invite_code == code, PartySession.is_active.is_(True)))
+    if party is None:
+        party = db.scalar(select(PartySession).where(PartySession.is_active.is_(True)).order_by(PartySession.started_at.desc()))
+
+    room = _configured_room(db)
     mention = f"@{user_login}" if user_login else "Зритель"
-    if room is None:
+    if room is None and party is None:
         return CommandResult(
             reply=f"{mention}, очередь не настроена: создайте комнату на сайте или укажите код.",
             action="configuration_error",
         )
 
+    target_room_id = party.id if party else (room.id if room else None)
+
     if command == "help":
         return CommandResult(
             reply=f"{mention}: !sr <название трека>, !tracks, !queue, !now. Для загрузки своего MP3 перейдите на сайт.",
-            room_id=room.id,
+            room_id=target_room_id,
             action="help",
         )
 
@@ -176,47 +190,75 @@ def handle_chat_command(
 
         choices = ", ".join(f"{entry['key']} — {entry['title']}" for entry in LIBRARY[:6])
         return CommandResult(
-            reply=f"{mention}, медиатека: {choices}", room_id=room.id, action="library"
+            reply=f"{mention}, медиатека: {choices}", room_id=target_room_id, action="library"
         )
 
     if command in {"queue", "now"}:
-        if db.scalar(
-            select(func.count()).select_from(PlaylistRound).where(
-                PlaylistRound.room_id == room.id,
-                PlaylistRound.status == RoundStatus.ACTIVE,
-            )
-        ) == 0:
-            create_playlist_round(db, room.id, room.owner_id)
-            db.commit()
-        ranked = get_ranked_queue(db, room.id)
-        playing = next(
-            (item for item in ranked if item.queue_item.state == QueueItemState.PLAYING),
-            None,
-        )
-        if command == "now":
-            reply = (
-                f"{mention}, сейчас играет: {playing.track.title} — {playing.track.artist}"
-                if playing
-                else f"{mention}, сейчас ничего не играет."
-            )
-            return CommandResult(reply=reply, room_id=room.id, action="now")
+        if party is not None:
+            party_items = db.scalars(
+                select(PartyQueueItem)
+                .where(PartyQueueItem.party_id == party.id)
+                .order_by(PartyQueueItem.score.desc(), PartyQueueItem.created_at.asc())
+            ).all()
+            if command == "now":
+                playing_track = None
+                if party.playback_track_id:
+                    playing_track = next((t for t in party_items if t.id == party.playback_track_id), None)
+                if not playing_track and party_items:
+                    playing_track = party_items[0]
+                reply = (
+                    f"{mention}, сейчас играет: {playing_track.title} — {playing_track.artist}"
+                    if playing_track
+                    else f"{mention}, сейчас ничего не играет."
+                )
+                return CommandResult(reply=reply, room_id=party.id, action="now")
+            else:
+                upcoming = [t.title for t in party_items[:4]]
+                reply = (
+                    f"{mention}, топ очереди тусовки: " + " → ".join(upcoming)
+                    if upcoming
+                    else f"{mention}, очередь тусовки пока пуста."
+                )
+                return CommandResult(reply=reply, room_id=party.id, action="queue")
 
-        upcoming = [
-            item.track.title
-            for item in ranked
-            if item.queue_item.state in {QueueItemState.QUEUED, QueueItemState.PLAYING}
-        ][:3]
-        reply = (
-            f"{mention}, следующие треки: " + " → ".join(upcoming)
-            if upcoming
-            else f"{mention}, очередь пока пуста."
-        )
-        return CommandResult(reply=reply, room_id=room.id, action="queue")
+        if room is not None:
+            if db.scalar(
+                select(func.count()).select_from(PlaylistRound).where(
+                    PlaylistRound.room_id == room.id,
+                    PlaylistRound.status == RoundStatus.ACTIVE,
+                )
+            ) == 0:
+                create_playlist_round(db, room.id, room.owner_id)
+                db.commit()
+            ranked = get_ranked_queue(db, room.id)
+            playing = next(
+                (item for item in ranked if item.queue_item.state == QueueItemState.PLAYING),
+                None,
+            )
+            if command == "now":
+                reply = (
+                    f"{mention}, сейчас играет: {playing.track.title} — {playing.track.artist}"
+                    if playing
+                    else f"{mention}, сейчас ничего не играет."
+                )
+                return CommandResult(reply=reply, room_id=room.id, action="now")
+
+            upcoming = [
+                item.track.title
+                for item in ranked
+                if item.queue_item.state in {QueueItemState.QUEUED, QueueItemState.PLAYING}
+            ][:3]
+            reply = (
+                f"{mention}, следующие треки: " + " → ".join(upcoming)
+                if upcoming
+                else f"{mention}, очередь пока пуста."
+            )
+            return CommandResult(reply=reply, room_id=room.id, action="queue")
 
     if not argument:
         return CommandResult(
             reply=f"{mention}, используйте: !sr <название трека>. Команда !tracks покажет варианты, а для загрузки своего MP3 зайдите на сайт.",
-            room_id=room.id,
+            room_id=target_room_id,
             action="usage",
         )
 
@@ -224,18 +266,84 @@ def handle_chat_command(
     if not matches:
         return CommandResult(
             reply=f"{mention}, трек «{argument[:50]}» не найден в медиатеке. Напишите !tracks или загрузите свой MP3 на сайте.",
-            room_id=room.id,
+            room_id=target_room_id,
             action="not_found",
         )
     if len(matches) > 1:
         variants = ", ".join(entry["key"] for entry in matches[:5])
         return CommandResult(
-            reply=f"{mention}, найдено несколько треков: {variants}. Укажите код.",
-            room_id=room.id,
+            reply=f"{mention}, найдено несколько треков: {variants}. Укажите точный код.",
+            room_id=target_room_id,
             action="ambiguous",
         )
 
     item = matches[0]
+
+    # Handle active PartySession
+    if party is not None:
+        party_item = db.scalar(
+            select(PartyQueueItem).where(
+                PartyQueueItem.party_id == party.id,
+                PartyQueueItem.library_key == item["key"],
+            )
+        )
+        if party_item is not None:
+            party_item.score += 1
+            db.commit()
+            party_manager.notify_party(
+                party.id,
+                action="track_voted",
+                extra={
+                    "track_id": str(party_item.id),
+                    "title": party_item.title,
+                    "score": party_item.score,
+                    "voted_by": user_login,
+                },
+            )
+            return CommandResult(
+                reply=f"{mention}, «{item['title']}» уже в очереди тусовки, добавлен +1 голос! Рейтинг: {party_item.score} 🔥",
+                room_id=party.id,
+                track_id=party_item.id,
+                action="track_voted",
+            )
+
+        # Resolve viewer user for contributor tag
+        fallback_room = room or db.scalar(select(Room).order_by(Room.created_at.desc()).limit(1))
+        viewer = _ensure_twitch_viewer(
+            db, fallback_room, twitch_user_id, user_login, user_name or user_login
+        ) if fallback_room else None
+
+        new_party_item = PartyQueueItem(
+            party_id=party.id,
+            title=item["title"],
+            artist=item["artist"],
+            genre=item.get("genre", "Вечеринка"),
+            duration_seconds=item["duration_seconds"],
+            source_type="library",
+            library_key=item["key"],
+            added_by_user_id=viewer.id if viewer else None,
+            score=1,
+        )
+        db.add(new_party_item)
+        db.commit()
+        db.refresh(new_party_item)
+        party_manager.notify_party(
+            party.id,
+            action="track_added",
+            extra={
+                "track_id": str(new_party_item.id),
+                "title": new_party_item.title,
+                "contributor": viewer.display_name if viewer else user_login,
+            },
+        )
+        return CommandResult(
+            reply=f"{mention}, «{new_party_item.title}» добавлен в очередь вечеринки 🎵",
+            room_id=party.id,
+            track_id=new_party_item.id,
+            action="track_added",
+        )
+
+    # Fallback to Community Room Mode if no party is active
     duplicate = db.scalar(
         select(Track).where(Track.room_id == room.id, Track.library_key == item["key"])
     )
@@ -275,50 +383,7 @@ def handle_chat_command(
 
     from app.routers.communities import _add_to_active_queue, manager
     _add_to_active_queue(db, room, track, viewer.id)
-
-    from app.models import PartySession, PartyQueueItem
-    from app.routers.parties import party_manager
-
-    party = db.scalar(
-        select(PartySession)
-        .where(PartySession.is_active.is_(True))
-        .order_by(PartySession.started_at.desc())
-    )
-    if party is not None:
-        party_dup = db.scalar(
-            select(PartyQueueItem).where(
-                PartyQueueItem.party_id == party.id,
-                PartyQueueItem.library_key == item["key"],
-            )
-        )
-        if party_dup is None:
-            party_item = PartyQueueItem(
-                party_id=party.id,
-                title=item["title"],
-                artist=item["artist"],
-                genre=item.get("genre", "Вечеринка"),
-                duration_seconds=item["duration_seconds"],
-                source_type="library",
-                library_key=item["key"],
-                added_by_user_id=viewer.id,
-                score=1,
-            )
-            db.add(party_item)
-            db.commit()
-            party_manager.notify_party(
-                party.id,
-                action="track_added",
-                extra={
-                    "track_id": str(party_item.id),
-                    "title": party_item.title,
-                    "contributor": viewer.display_name or user_login,
-                },
-            )
-        else:
-            db.commit()
-    else:
-        db.commit()
-
+    db.commit()
     db.refresh(track)
 
     manager.notify_room(

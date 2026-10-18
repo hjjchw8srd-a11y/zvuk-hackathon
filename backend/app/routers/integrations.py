@@ -24,6 +24,7 @@ class SimulateCommandRequest(BaseModel):
 class ConfigureStreamerBotRequest(BaseModel):
     room_code: str | None = None
     enabled: bool | None = None
+    password: str | None = None
 
 
 @router.get("/status")
@@ -39,6 +40,8 @@ async def update_streamerbot_config(
     if payload.room_code is not None:
         code = payload.room_code.strip().upper()
         settings.streamerbot_room_code = code
+    if payload.password is not None:
+        settings.streamerbot_password = payload.password
     if payload.enabled is not None:
         settings.streamerbot_enabled = payload.enabled
         if payload.enabled:
