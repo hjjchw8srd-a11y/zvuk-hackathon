@@ -917,6 +917,30 @@ export function PartyPage() {
                 Выйти
               </button>
             )}
+
+            {/* Профиль текущего пользователя */}
+            {_authUser && (
+              <div
+                className="h-12 px-3 rounded-2xl bg-[#171717] border border-[#2a2a2a] flex items-center gap-2.5 shadow-sm"
+                title={`Вы вошли как ${_authUser.display_name || _authUser.username || _authUser.email}`}
+              >
+                <div className="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center justify-center font-bold text-xs shrink-0 overflow-hidden">
+                  {_authUser.avatar_url ? (
+                    <img src={_authUser.avatar_url} alt="Аватар" className="w-full h-full object-cover" />
+                  ) : (
+                    (_authUser.display_name || _authUser.username || "U")[0].toUpperCase()
+                  )}
+                </div>
+                <div className="text-left hidden sm:block min-w-0 max-w-[130px]">
+                  <div className="text-xs font-bold text-white leading-tight truncate">
+                    {_authUser.display_name || _authUser.username || "Слушатель"}
+                  </div>
+                  <div className="text-[10px] text-neutral-400 leading-tight truncate">
+                    {isHost ? "👑 Хост тусовки" : "🎧 Участник"}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1064,16 +1088,6 @@ export function PartyPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIsStreamerBotOpen(true)}
-                  className="px-3.5 py-2.5 rounded-2xl bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 font-bold text-xs tracking-wide transition-all shadow-lg shadow-purple-600/10 flex items-center gap-1.5 cursor-pointer active:scale-95"
-                  title="Заказ треков из Twitch-чата"
-                >
-                  <Bot size={16} />
-                  <span>Twitch Чат</span>
-                </button>
-
                 <button
                   onClick={() => setModalAddTrack(true)}
                   className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-orange-500 to-rose-600 hover:from-orange-400 hover:to-rose-500 text-white font-bold text-xs tracking-wide transition-all shadow-lg shadow-orange-500/20 flex items-center gap-1.5 cursor-pointer active:scale-95"
