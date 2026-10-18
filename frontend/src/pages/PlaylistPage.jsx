@@ -19,6 +19,7 @@ import { audioService } from "@/lib/audioService";
 import { QRCode } from "@/components/QRCode.jsx";
 import { EqualizerModal } from "@/components/EqualizerModal.jsx";
 import { StreamerBotModal } from "@/components/StreamerBotModal.jsx";
+import { useSidebar } from "@/components/ui/sidebar";
 
 // ─── Заготовки под будущий бэкенд (когда появится авторизация и API) ────────
 const DEFAULT_USER = {
@@ -258,6 +259,7 @@ function NextBadge({ tracks, currentId }) {
 export function PlaylistPage() {
   const { id: routeRoomId } = useParams();
   const { user: authUser } = useAuth();
+  const { open: sidebarOpen } = useSidebar();
 
   // Текущий пользователь из AuthContext или fallback
   const user = authUser
@@ -1466,7 +1468,12 @@ export function PlaylistPage() {
       )}
 
       {/* ═══ МИНИ-ПЛЕЕР ═════════════════════════════════════════════════════ */}
-      <div className="fixed bottom-[56px] md:bottom-0 left-0 right-0 z-40 bg-[#0e0e0e]/95 backdrop-blur-xl border-t border-[#262626]">
+      <div
+        className={cn(
+          "fixed bottom-[56px] md:bottom-0 right-0 z-40 bg-[#0e0e0e]/95 backdrop-blur-xl border-t border-[#262626] transition-all duration-300",
+          sidebarOpen ? "left-0 md:left-64" : "left-0 md:left-[68px]"
+        )}
+      >
         <div className="h-0.5 w-full bg-neutral-800 cursor-pointer" onClick={seekPlayer}>
           <div className="h-full bg-[#a3e635] transition-[width] duration-500" style={{ width: `${player.progress}%` }} />
         </div>

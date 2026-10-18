@@ -57,7 +57,7 @@ export function Sidebar({ className, children, ...props }) {
     <aside
       data-state={open ? "expanded" : "collapsed"}
       className={cn(
-        "relative flex flex-col border-r border-[#262626] bg-[#171717] text-neutral-100 transition-all duration-300 ease-in-out shrink-0 select-none overflow-hidden",
+        "sticky top-0 h-screen flex flex-col border-r border-[#262626] bg-[#171717] text-neutral-100 transition-all duration-300 ease-in-out shrink-0 select-none overflow-hidden z-30",
         open ? "w-64" : "w-[68px]",
         className
       )}
@@ -110,7 +110,7 @@ export function SidebarHeader({ className, ...props }) {
 export function SidebarFooter({ className, ...props }) {
   return (
     <div
-      className={cn("mt-auto flex flex-col justify-center", className)}
+      className={cn("mt-auto flex flex-col justify-center shrink-0", className)}
       {...props}
     />
   );
