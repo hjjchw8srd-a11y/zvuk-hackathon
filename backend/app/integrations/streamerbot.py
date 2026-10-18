@@ -145,6 +145,8 @@ def handle_chat_command(
     # Normalization of aliases for Twitch & Russian viewers
     if raw_cmd in {"track", "sr", "song", "трек", "песня"}:
         command = "track"
+    elif raw_cmd in {"vote", "v", "+", "+1", "голос", "лайк", "up"}:
+        command = "vote"
     elif raw_cmd in {"tracks", "треки", "песни", "список"}:
         command = "tracks"
     elif raw_cmd in {"queue", "очередь", "q"}:
@@ -180,7 +182,7 @@ def handle_chat_command(
 
     if command == "help":
         return CommandResult(
-            reply=f"{mention}: !sr <название трека>, !tracks, !queue, !now. Для загрузки своего MP3 перейдите на сайт.",
+            reply=f"{mention}: !sr <трек> — предложить трек, !vote <трек> (или !+ <трек>) — проголосовать, !tracks, !queue, !now.",
             room_id=target_room_id,
             action="help",
         )
@@ -255,6 +257,98 @@ def handle_chat_command(
             )
             return CommandResult(reply=reply, room_id=room.id, action="queue")
 
+    if command == "vote":
+        if not argument:
+            return CommandResult(
+                reply=f"{mention}, укажите трек: !vote <название> (или !+ <название>). Например: !vote dawn",
+                room_id=target_room_id,
+                action="usage",
+            )
+        matches = _library_matches(argument)
+        if not matches:
+            return CommandResult(
+                reply=f"{mention}, трек «{argument[:50]}» не найден в медиатеке. Напишите !tracks для списка.",
+                room_id=target_room_id,
+                action="not_found",
+            )
+        if len(matches) > 1:
+            variants = ", ".join(entry["key"] for entry in matches[:5])
+            return CommandResult(
+                reply=f"{mention}, найдено несколько треков: {variants}. Укажите точный код.",
+                room_id=target_room_id,
+                action="ambiguous",
+            )
+        item = matches[0]
+
+        if party is not None:
+            from app.models import PartyVote
+
+            fallback_room = room or db.scalar(select(Room).order_by(Room.created_at.desc()).limit(1))
+            viewer = _ensure_twitch_viewer(
+                db, fallback_room, twitch_user_id, user_login, user_name or user_login
+            ) if fallback_room else None
+
+            party_item = db.scalar(
+                select(PartyQueueItem).where(
+                    PartyQueueItem.party_id == party.id,
+                    PartyQueueItem.library_key == item["key"],
+                )
+            )
+            if party_item is None:
+                return CommandResult(
+                    reply=f"{mention}, трек «{item['title']}» еще не в очереди тусовки. Вы можете предложить его: !sr {item['key']} 🎵",
+                    room_id=party.id,
+                    action="not_in_queue",
+                )
+
+            if viewer:
+                already_voted = db.scalar(
+                    select(PartyVote).where(
+                        PartyVote.party_queue_item_id == party_item.id,
+                        PartyVote.user_id == viewer.id,
+                    )
+                )
+                if already_voted is not None:
+                    return CommandResult(
+                        reply=f"{mention}, вы уже голосовали за «{party_item.title}» (всего баллов: {party_item.score}) 👍",
+                        room_id=party.id,
+                        track_id=party_item.id,
+                        action="already_voted",
+                    )
+                db.add(
+                    PartyVote(
+                        party_id=party.id,
+                        party_queue_item_id=party_item.id,
+                        user_id=viewer.id,
+                        value=1,
+                    )
+                )
+
+            party_item.score += 1
+            db.commit()
+            party_manager.notify_party(
+                party.id,
+                action="track_voted",
+                extra={
+                    "track_id": str(party_item.id),
+                    "title": party_item.title,
+                    "score": party_item.score,
+                    "voted_by": user_login,
+                },
+            )
+            return CommandResult(
+                reply=f"{mention}, ваш голос за «{party_item.title}» учтен! Рейтинг трека: {party_item.score} 🔥",
+                room_id=party.id,
+                track_id=party_item.id,
+                action="track_voted",
+            )
+        else:
+            return CommandResult(
+                reply=f"{mention}, голосование доступно во время активной вечеринки на сайте.",
+                room_id=target_room_id,
+                action="party_inactive",
+            )
+
     if not argument:
         return CommandResult(
             reply=f"{mention}, используйте: !sr <название трека>. Команда !tracks покажет варианты, а для загрузки своего MP3 зайдите на сайт.",
@@ -296,47 +390,29 @@ def handle_chat_command(
         )
         if party_item is not None:
             # Check if this user already voted for this track
+            already_voted = False
             if viewer:
                 already_voted = db.scalar(
                     select(PartyVote).where(
                         PartyVote.party_queue_item_id == party_item.id,
                         PartyVote.user_id == viewer.id,
                     )
-                )
-                if already_voted is not None:
-                    return CommandResult(
-                        reply=f"{mention}, вы уже голосовали за «{item['title']}» (всего баллов: {party_item.score}) 👍",
-                        room_id=party.id,
-                        track_id=party_item.id,
-                        action="already_voted",
-                    )
-                db.add(
-                    PartyVote(
-                        party_id=party.id,
-                        party_queue_item_id=party_item.id,
-                        user_id=viewer.id,
-                        value=1,
-                    )
-                )
+                ) is not None
 
-            party_item.score += 1
-            db.commit()
-            party_manager.notify_party(
-                party.id,
-                action="track_voted",
-                extra={
-                    "track_id": str(party_item.id),
-                    "title": party_item.title,
-                    "score": party_item.score,
-                    "voted_by": user_login,
-                },
-            )
-            return CommandResult(
-                reply=f"{mention}, «{item['title']}» уже в очереди тусовки, добавлен +1 голос! Рейтинг: {party_item.score} 🔥",
-                room_id=party.id,
-                track_id=party_item.id,
-                action="track_voted",
-            )
+            if already_voted:
+                return CommandResult(
+                    reply=f"{mention}, трек «{item['title']}» уже в очереди, и вы уже за него голосовали! (баллы: {party_item.score}) 👍",
+                    room_id=party.id,
+                    track_id=party_item.id,
+                    action="duplicate_voted",
+                )
+            else:
+                return CommandResult(
+                    reply=f"{mention}, трек «{item['title']}» уже находится в очереди! Напишите !vote {item['key']} (или !+ {item['key']}), чтобы проголосовать за него 🗳️",
+                    room_id=party.id,
+                    track_id=party_item.id,
+                    action="duplicate_suggest_vote",
+                )
 
         new_party_item = PartyQueueItem(
             party_id=party.id,
@@ -386,10 +462,10 @@ def handle_chat_command(
     )
     if duplicate is not None:
         return CommandResult(
-            reply=f"{mention}, «{item['title']}» уже предложен или находится в очереди.",
+            reply=f"{mention}, трек «{item['title']}» уже находится в очереди! Напишите !vote {item['key']}, чтобы проголосовать за него 🗳️",
             room_id=room.id,
             track_id=duplicate.id,
-            action="duplicate",
+            action="duplicate_suggest_vote",
         )
 
     viewer = _ensure_twitch_viewer(
@@ -466,7 +542,7 @@ class StreamerBotBridge:
             "last_error": self.last_error,
             "last_event_at": self.last_event_at.isoformat() if self.last_event_at else None,
             "commands_processed": self.commands_processed,
-            "commands": ["!sr <трек>", "!tracks", "!queue", "!now", "!help"],
+            "commands": ["!sr <трек>", "!vote <трек>", "!tracks", "!queue", "!now", "!help"],
         }
 
     def start(self) -> None:

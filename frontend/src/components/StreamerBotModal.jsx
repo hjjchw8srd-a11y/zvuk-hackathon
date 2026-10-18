@@ -259,7 +259,8 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
             </p>
             <div className="rounded-2xl bg-[#16161d] border border-[#262630] divide-y divide-[#262630] overflow-hidden font-mono text-[11px]">
               {[
-                { cmd: "!sr funk90", desc: "Добавить трек в очередь (алиас: !track, !трек)" },
+                { cmd: "!sr funk90", desc: "Добавить новый трек в очередь (алиас: !track, !трек)" },
+                { cmd: "!vote funk90", desc: "Проголосовать за трек в очереди (алиас: !+, !голос)" },
                 { cmd: "!tracks", desc: "Показать список треков медиатеки" },
                 { cmd: "!queue", desc: "Показать топ очереди воспроизведения" },
                 { cmd: "!now", desc: "Показать играющий сейчас трек" },
@@ -289,7 +290,7 @@ export function StreamerBotModal({ open, onOpenChange, currentRoomCode }) {
 
             {/* Quick Chips */}
             <div className="flex flex-wrap gap-1.5 mb-2.5">
-              {["!sr funk90", "!tracks", "!sr dawn", "!queue", "!now", "!help"].map((chip) => (
+              {["!sr funk90", "!vote funk90", "!tracks", "!sr dawn", "!queue", "!now", "!help"].map((chip) => (
                 <button
                   key={chip}
                   type="button"
