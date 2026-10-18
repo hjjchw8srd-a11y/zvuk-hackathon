@@ -82,6 +82,12 @@ async def startup_event():
     except Exception:
         pass
 
+    try:
+        from app.database import ensure_schema_columns
+        ensure_schema_columns()
+    except Exception as e:
+        print("ensure_schema_columns startup:", e)
+
     # 1. Automatic DDL migration for new columns and indexes
     try:
         with engine.begin() as conn:

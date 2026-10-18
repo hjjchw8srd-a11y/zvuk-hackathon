@@ -17,6 +17,7 @@ services:
     restart: unless-stopped
 
   backend:
+    container_name: zvuk-backend
     build:
       context: ./backend
     environment:
@@ -28,6 +29,8 @@ services:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - uploads_data:/app/uploads
+      - ./backend/app:/app/app
+      - ./backend/alembic:/app/alembic
     depends_on:
       db:
         condition: service_healthy

@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.auth import hash_password
-from app.database import SessionLocal
+from app.database import SessionLocal, ensure_schema_columns
 from app.models import (
     MemberRole,
     ModerationStatus,
@@ -26,6 +26,11 @@ from app.services import create_playlist_round
 
 
 def seed_database():
+    try:
+        ensure_schema_columns()
+    except Exception as e:
+        print("[!] Ошибка при подготовке структуры БД перед seed:", e)
+
     print("[*] Проверка и подготовка демонстрационных данных...")
     db: Session = SessionLocal()
     try:
